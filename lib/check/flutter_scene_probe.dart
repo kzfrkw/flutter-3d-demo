@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm;
@@ -71,6 +73,7 @@ class _ProbeViewState extends State<_ProbeView> {
         size: const Size(240, 80),
         pixelRatio: 2,
         worldHeight: 0.5,
+        geometry: _mirroredQuad(width: 0.5 * 240 / 80, height: 0.5),
         child: const Material(
           color: Colors.white,
           child: Center(
@@ -89,6 +92,32 @@ class _ProbeViewState extends State<_ProbeView> {
       debugPrint('s0-check: $e\n$st');
       widget.report(CheckItem.widgetEmbed, CheckResult.ng('$e'));
     }
+  }
+
+  /// 既定の四角形と同じ頂点・巻き順で、U だけ左右逆にした四角形。
+  /// 既定の四角形は -Z 側のカメラから見えるが文字が反転するため、UV で直す。
+  /// (+Z 側のカメラからは裏面カリングで見えなかった。)
+  MeshGeometry _mirroredQuad({required double width, required double height}) {
+    final hw = width / 2;
+    final hh = height / 2;
+    return MeshGeometry.fromArrays(
+      positions: Float32List.fromList([
+        hw,
+        -hh,
+        0,
+        -hw,
+        -hh,
+        0,
+        -hw,
+        hh,
+        0,
+        hw,
+        hh,
+        0,
+      ]),
+      texCoords: Float32List.fromList([1, 1, 0, 1, 0, 0, 1, 0]),
+      indices: [0, 1, 3, 3, 1, 2],
+    );
   }
 
   void _setUpAnimation(Node model) {
@@ -152,8 +181,9 @@ class _ProbeViewState extends State<_ProbeView> {
     return SceneView(
       _scene,
       camera: PerspectiveCamera(
-        // WidgetComponent の面は +Z 向き。-Z 側から見ると裏になり反転して見える。
-        position: vm.Vector3(0, 1.2, 4),
+        // +Z 側に置くと WidgetComponent の面が裏面カリングで見えない。
+        // -Z 側(既定の向き)から見て、反転は _mirroredQuad で直す。
+        position: vm.Vector3(0, 1.2, -4),
         target: vm.Vector3(0, 0.6, 0),
       ),
       onTick: _onTick,
