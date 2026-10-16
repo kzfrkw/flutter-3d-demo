@@ -5,17 +5,40 @@ import 'check/check_page.dart';
 import 'check/env_info.dart';
 import 'check/flutter_scene_probe.dart';
 import 'check/scene_probe.dart';
+import 'office/data/dummy_office_data.dart';
+import 'office/data/office_models.dart';
+import 'office/office_page.dart';
+import 'office/scene/office_scene_builder.dart';
+import 'office/scene/office_scene_view.dart';
 
 void main() {
-  runApp(App(checkMode: isCheckMode(Uri.base), probe: FlutterSceneProbe()));
+  runApp(
+    App(
+      checkMode: isCheckMode(Uri.base),
+      probe: FlutterSceneProbe(),
+      officeView: const FlutterSceneOfficeView(),
+    ),
+  );
 }
 
 class App extends StatelessWidget {
-  const App({super.key, required this.checkMode, required this.probe});
+  const App({
+    super.key,
+    required this.checkMode,
+    required this.probe,
+    required this.officeView,
+    this.officeData,
+  });
 
   /// URL に `?check` があるか。true なら s0-check を表示する。
   final bool checkMode;
   final SceneProbe probe;
+
+  /// s1-office の 3D 描画。
+  final OfficeSceneView officeView;
+
+  /// null なら [dummyOfficeData]。
+  final OfficeData? officeData;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +47,7 @@ class App extends StatelessWidget {
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.indigo)),
       home: checkMode
           ? CheckPage(probe: probe, env: EnvInfo.current())
-          : const Scaffold(body: Center(child: Text('準備中'))),
+          : OfficePage(view: officeView, data: officeData ?? dummyOfficeData),
     );
   }
 }
