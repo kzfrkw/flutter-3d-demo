@@ -122,6 +122,14 @@ class _ProbeViewState extends State<_ProbeView> {
     if (!_animReported && clip != null && clip.playbackTime > 0) {
       _animReported = true;
       widget.report(CheckItem.animation, const CheckResult.ok());
+    } else if (!_animReported &&
+        clip != null &&
+        elapsed > const Duration(seconds: 10)) {
+      _animReported = true;
+      widget.report(
+        CheckItem.animation,
+        const CheckResult.ng('10 秒たってもアニメの再生時刻が進まない'),
+      );
     }
     final panel = _panel;
     if (!_embedReported && panel != null) {
@@ -144,7 +152,8 @@ class _ProbeViewState extends State<_ProbeView> {
     return SceneView(
       _scene,
       camera: PerspectiveCamera(
-        position: vm.Vector3(0, 1.2, -4),
+        // WidgetComponent の面は +Z 向き。-Z 側から見ると裏になり反転して見える。
+        position: vm.Vector3(0, 1.2, 4),
         target: vm.Vector3(0, 0.6, 0),
       ),
       onTick: _onTick,
