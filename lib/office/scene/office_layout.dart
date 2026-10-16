@@ -225,9 +225,12 @@ List<LayoutBox> _roomWalls(Room room, LayoutStyle style) {
       );
     }
     const eps = 1e-9;
-    if (lo - (-length / 2) > eps)
+    if (lo + length / 2 > eps) {
       walls.add(segment('$name-1', -length / 2, lo));
-    if (length / 2 - hi > eps) walls.add(segment('$name-2', hi, length / 2));
+    }
+    if (length / 2 - hi > eps) {
+      walls.add(segment('$name-2', hi, length / 2));
+    }
   }
   return walls;
 }
