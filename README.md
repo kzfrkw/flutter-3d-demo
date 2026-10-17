@@ -14,9 +14,12 @@ URL の末尾に `?check` を付けて開くと、技術検証ページ s0-check
 
 - `data/`: `OfficeData` と、コード内固定のダミー(`dummy_office_data.dart`)。純 Dart で、描画ライブラリを import しない
 - `scene/`: `office_layout.dart`(`OfficeData` → 置く箱の一覧、純 Dart)、`office_scene_view.dart`(描画の差し替え口)、`office_scene_builder.dart`(flutter_scene で実際に描く唯一のファイル)
+- `people/`: 人の移動(純 Dart)。`people_simulation.dart`(歩行者の状態・区間の移動・向き・揺れ・停滞の検出)、`route_planner.dart`(neighbors 上の最短経路)、`people_count.dart`(`?people=N` の解釈)
 - `office_page.dart`: s1-office の画面
 
-後続の置き場所の方針: 人の移動(T3)は `lib/office/people/`、クリック選択・情報カードなどの UI 連携(T4)は `lib/office/ui/` に足す。シーン側は ID(`EntityRef`、箱の `<entityId>#<部位>`)で `OfficeData` を参照し、値を書き写さない。
+開発者用: URL に `?people=10` を付けると人を 10 人に増やして開く(5〜10 に丸める。性能の確認用)。
+
+後続の置き場所の方針: クリック選択・情報カードなどの UI 連携(T4)は `lib/office/ui/` に足す。シーン側は ID(`EntityRef`、箱の `<entityId>#<部位>`)で `OfficeData` を参照し、値を書き写さない。
 
 ## 版の固定
 
