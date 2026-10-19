@@ -8,6 +8,7 @@ import 'check/scene_probe.dart';
 import 'office/data/dummy_office_data.dart';
 import 'office/data/office_models.dart';
 import 'office/office_page.dart';
+import 'office/people/people_count.dart';
 import 'office/scene/office_scene_builder.dart';
 import 'office/scene/office_scene_view.dart';
 
@@ -17,6 +18,7 @@ void main() {
       checkMode: isCheckMode(Uri.base),
       probe: FlutterSceneProbe(),
       officeView: const FlutterSceneOfficeView(),
+      officeData: officeDataForUri(Uri.base, dummyOfficeData),
     ),
   );
 }

@@ -49,3 +49,13 @@
 - `assets/models/check_cube.glb`: `tool/make_check_model.py` で自作した、回転アニメ(`Spin`)付きの橙色の箱。**CC0 1.0**(第三者の素材を含まない)。再生成は `python3 tool/make_check_model.py`。
 - s1-office のオフィスは flutter_scene の `CuboidGeometry`(箱)で構成。第三者の素材なし(CC0 の家具モデルは使っていない)。
 - 骨格アニメ付きの CC0 モデルは未入手。骨格アニメの検証は、必要なら別途 CC0 の素材を入れて行う(今回の「アニメ再生」はノードのアニメーションの検証)。
+
+## 歩く人(T3 / F2)
+
+- 表し方: 骨格アニメ付きの人物モデルは素材が無い(外部から取らない)ため使わず、カプセル(高さ 1.6m・半径 0.25m)+前方の小さな箱(鼻)で表す。「歩行アニメ」は歩いた距離に連動した上下の揺れ(`bob`)と左右の傾き(`lean`)で代用した。向きは鼻で分かる。Node の name は `<personId>#body` / `<personId>#nose`。
+- 動き: `lib/office/people/people_simulation.dart`(純 Dart)が Route の waypoint を順にたどる。壁・机を避ける仕組みは実行時の当たり判定ではなく、「経路は neighbors のグラフ上だけ」+「グラフの辺が壁・机から人の半径ぶん離れている」ことをテスト(`people_walk_test.dart`)で保証する方式。既定データは Waypoint の座標を直さずに通った。
+- 向き: 目標の waypoint への方向 `atan2(dx, dz)` に、最大角速度 12 rad/s で近づける(折り返しも約 0.26 秒で一致)。
+- 停滞時の再設定: 3 秒ごとの窓で歩いた距離が 0.5m 未満なら、今向かっている waypoint(無効な Route なら立っている waypoint)から、到達できる別の waypoint へ幅優先探索の最短経路を作り、往復の周回に差し替える。直線で近い点へは向かわない(壁を抜けるため)。通常データでは起きない保険。
+- 10 人: `?people=10`(`people_count.dart`)で、追加の 4 人(席なし、既存の Waypoint をつなぐ Route)を足した OfficeData を渡す。
+- fps の実測(AC13): **未測定**。実装者の環境では Chrome を起動できず、QA または人の確認で測る。測ったら環境と値をここに書く。目安 30fps を割る場合は、鼻の Node を省く → カプセルの分割数(16/4)を減らす、の順に試す。
+- つまずき: ツールの `flutter test` は pub.dev に接続しようとして失敗する。実装者は `XDG_CONFIG_HOME` を一時ディレクトリにして `flutter pub get --offline` のあと `flutter test --no-pub` / `flutter analyze --no-pub` を Bash で実行した。
