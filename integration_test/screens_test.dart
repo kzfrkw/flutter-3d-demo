@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_3d_demo/office/scene/scene_loading.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
@@ -14,15 +15,20 @@ import 'package:integration_test/integration_test.dart';
 class _FakeView implements OfficeSceneView {
   ValueChanged<EntityRef?>? onPick;
 
+  /// null なら床色の面。読み込み中・エラーの画面を出すときに渡す。
+  _FakeView({this.child});
+  final Widget? child;
+
   @override
   Widget build(
     BuildContext context,
     OfficeData data, {
     ValueChanged<EntityRef?>? onPick,
     ValueListenable<Duration>? virtualTime,
+    ViewResetSignal? resetView,
   }) {
     this.onPick = onPick;
-    return const ColoredBox(color: Color(0xFFE8E2D4));
+    return child ?? const ColoredBox(color: Color(0xFFE8E2D4));
   }
 }
 
@@ -143,5 +149,109 @@ void main() {
       ),
     );
     await shoot(tester, 's2-labels');
+  });
+
+  /// 幅 [width] の端末として出す(MediaQuery も合わせる)。
+  Widget sized(Widget page, double? width) => width == null
+      ? page
+      : Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: width,
+            height: 800,
+            child: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(size: Size(width, 800)),
+                child: page,
+              ),
+            ),
+          ),
+        );
+
+  /// 無限アニメ(読み込み中)があるので pumpAndSettle は使わず、時間を進めて撮る。
+  Future<void> shootAfter(
+    WidgetTester tester,
+    String name,
+    Duration after,
+  ) async {
+    await tester.pump(after);
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await tester.pump();
+    await binding.takeScreenshot(name);
+  }
+
+  testWidgets('s1 screens (reset button, loading, error)', (tester) async {
+    const roomA = EntityRef(EntityKind.room, 'room-a');
+    Future<_FakeView> open(_FakeView view, {double? width}) async {
+      await tester.pumpWidget(
+        app(
+          sized(
+            OfficePage(
+              view: view,
+              data: dummyOfficeData,
+              virtualTime: ValueNotifier(Duration.zero),
+            ),
+            width,
+          ),
+        ),
+      );
+      await binding.convertFlutterSurfaceToImage();
+      return view;
+    }
+
+    var view = await open(_FakeView());
+    await shoot(tester, 's1-reset-wide');
+    view.onPick!(roomA);
+    await tester.pump();
+    await shoot(tester, 's1-reset-wide-card');
+
+    view = await open(_FakeView(), width: 390);
+    await shoot(tester, 's1-reset-narrow');
+    view.onPick!(roomA);
+    await tester.pump();
+    await shoot(tester, 's1-reset-narrow-card');
+
+    await open(_FakeView(child: const SceneLoading()));
+    await shootAfter(tester, 's1-loading', const Duration(seconds: 1));
+    await shootAfter(tester, 's1-loading-slow', const Duration(seconds: 10));
+    await open(_FakeView(child: const SceneLoading()), width: 390);
+    await shootAfter(tester, 's1-loading-narrow', const Duration(seconds: 1));
+
+    await open(
+      _FakeView(
+        child: SceneErrorView(
+          failure: const SceneLoadFailure(
+            SceneLoadFailureKind.webgl2Unsupported,
+          ),
+          onReload: () {},
+        ),
+      ),
+    );
+    await shoot(tester, 's1-error-webgl2');
+    await open(
+      _FakeView(
+        child: SceneErrorView(
+          failure: const SceneLoadFailure(
+            SceneLoadFailureKind.loadFailed,
+            detail: 'Exception: Failed to load shader bundle',
+          ),
+          onReload: () {},
+        ),
+      ),
+    );
+    await shoot(tester, 's1-error-load');
+    await open(
+      _FakeView(
+        child: SceneErrorView(
+          failure: const SceneLoadFailure(
+            SceneLoadFailureKind.loadFailed,
+            detail: 'Exception: Failed to load shader bundle',
+          ),
+          onReload: () {},
+        ),
+      ),
+      width: 390,
+    );
+    await shoot(tester, 's1-error-load-narrow');
   });
 }

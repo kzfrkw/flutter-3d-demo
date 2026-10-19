@@ -39,6 +39,13 @@ StatusPillStyle roomOccupancyStyle(RoomOccupancy o) => switch (o) {
   ),
 };
 
+/// 3D の会議室の床の色。空き = 明るい緑、使用中 = 濃い赤(ピルと同系統。明暗差で区別できる)。
+/// 部屋の見た目の色はここ 1 か所で決める。
+Color roomFloorColor(RoomOccupancy o) => switch (o) {
+  RoomOccupancy.free => const Color(0xFFA5D6A7),
+  RoomOccupancy.occupied => const Color(0xFFB71C1C),
+};
+
 /// 名札の固定色。
 const Color personTagBackground = Color(0xFF263238);
 const Color personTagForeground = Color(0xFFFFFFFF);

@@ -13,6 +13,9 @@ import 'status/office_status.dart';
 /// 幅がこれ未満なら下シート、以上なら右の固定パネルでカードを出す。
 const double officeNarrowBreakpoint = 600;
 
+/// [視点リセット] ボタンの文言。
+const String resetViewLabel = '視点リセット';
+
 /// s1-office と s2-card。3D のオフィス(差し替え口の向こう)の上に情報カードを重ねる。
 class OfficePage extends StatefulWidget {
   const OfficePage({
@@ -38,6 +41,7 @@ class OfficePage extends StatefulWidget {
 
 class _OfficePageState extends State<OfficePage> {
   final ValueNotifier<Duration> _fixedTime = ValueNotifier(Duration.zero);
+  final ViewResetSignal _resetView = ViewResetSignal();
   EntityRef? _selected;
   Timer? _timer;
 
@@ -86,13 +90,29 @@ class _OfficePageState extends State<OfficePage> {
   void dispose() {
     _timer?.cancel();
     _fixedTime.dispose();
+    _resetView.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Flutter Scene Demo (ダミーデータ)')),
+      appBar: AppBar(
+        title: const Text('Flutter Scene Demo (ダミーデータ)'),
+        actions: [
+          // 狭い幅は題名が欠けるので、ボタンは 3D の右上に重ねる(_buildBody)。
+          if (MediaQuery.sizeOf(context).width >= officeNarrowBreakpoint)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                key: const Key('reset-view-button'),
+                onPressed: _resetView.reset,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text(resetViewLabel),
+              ),
+            ),
+        ],
+      ),
       body: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): () => _select(null),
@@ -128,8 +148,20 @@ class _OfficePageState extends State<OfficePage> {
             widget.data,
             onPick: _select,
             virtualTime: _time,
+            resetView: _resetView,
           ),
         ),
+        if (narrow)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: FilledButton.tonalIcon(
+              key: const Key('reset-view-button'),
+              onPressed: _resetView.reset,
+              icon: const Icon(Icons.restart_alt),
+              label: const Text(resetViewLabel),
+            ),
+          ),
         if (hasCard && !narrow)
           Positioned(
             key: const Key('info-card-side'),

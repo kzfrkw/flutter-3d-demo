@@ -8,6 +8,7 @@ class FakeOfficeSceneView implements OfficeSceneView {
   OfficeData? received;
   ValueChanged<EntityRef?>? receivedOnPick;
   ValueListenable<Duration>? receivedVirtualTime;
+  ViewResetSignal? receivedResetView;
   static const viewKey = Key('fake-office-view');
 
   /// 3D 上で対象(null なら背景)をタップしたことにする。
@@ -19,10 +20,12 @@ class FakeOfficeSceneView implements OfficeSceneView {
     OfficeData data, {
     ValueChanged<EntityRef?>? onPick,
     ValueListenable<Duration>? virtualTime,
+    ViewResetSignal? resetView,
   }) {
     received = data;
     receivedOnPick = onPick;
     receivedVirtualTime = virtualTime;
+    receivedResetView = resetView;
     return const SizedBox.expand(key: viewKey);
   }
 }

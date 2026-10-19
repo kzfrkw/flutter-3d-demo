@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import '../data/office_models.dart';
 
-enum BoxKind { floor, outerWall, roomWall, desk, chair }
+enum BoxKind { floor, outerWall, roomWall, roomFloor, desk, chair }
 
 /// シーンに置く箱 1 つ。描画ライブラリに依存しない設計図。
 class LayoutBox {
@@ -89,7 +89,7 @@ class LayoutStyle {
 }
 
 /// [data] から置く箱の一覧を作る。ID・位置・大きさ・向き・ドアだけを読む。
-/// 順序は floor、outerWall、roomWall、desk と chair。
+/// 順序は floor、outerWall、roomWall、roomFloor、desk と chair。
 List<LayoutBox> buildOfficeLayout(
   OfficeData data, {
   LayoutStyle style = const LayoutStyle(),
@@ -131,6 +131,23 @@ List<LayoutBox> buildOfficeLayout(
 
   for (final room in data.rooms) {
     boxes.addAll(_roomWalls(room, style));
+  }
+
+  // 会議室の床(状態で色を変える薄い箱。壁の内側)。
+  for (final room in data.rooms) {
+    boxes.add(
+      LayoutBox(
+        id: '${room.id}#floor',
+        kind: BoxKind.roomFloor,
+        ref: EntityRef(EntityKind.room, room.id),
+        center: room.position,
+        bottomY: 0,
+        width: room.size.width - 2 * style.roomWallThickness,
+        height: 0.02,
+        depth: room.size.depth - 2 * style.roomWallThickness,
+        color: style.floorColor,
+      ),
+    );
   }
 
   for (final seat in data.seats) {

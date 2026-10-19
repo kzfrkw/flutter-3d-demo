@@ -12,7 +12,7 @@ const _radius = 0.25;
 /// 人の半径ぶん広げた、壁・机・椅子の箱。
 List<LayoutBox> _obstacles(OfficeData data) => [
   for (final b in buildOfficeLayout(data))
-    if (b.kind != BoxKind.floor)
+    if (b.kind != BoxKind.floor && b.kind != BoxKind.roomFloor)
       LayoutBox(
         id: b.id,
         kind: b.kind,

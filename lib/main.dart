@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'check/check_mode.dart';
@@ -13,21 +14,29 @@ import 'office/people/people_simulation.dart';
 import 'office/scene/camera_yaw.dart';
 import 'office/scene/office_scene_builder.dart';
 import 'office/scene/office_scene_view.dart';
+import 'office/status/virtual_clock.dart';
 
 void main() {
   final data = officeDataForUri(Uri.base, dummyOfficeData);
   // 3D(名札の位置)とカード(現在の行動)で同じシミュレーションを共有する。
   final sim = PeopleSimulation(data);
+  // 仮想時刻はカード・3D パネル・部屋の床が同じ時計を読む。進めるのは 3D の描画。
+  final clock = VirtualClock(
+    cycleLength: data.cycleLength,
+    start: parseVirtualTimeStart(Uri.base, data.cycleLength) ?? Duration.zero,
+  );
   runApp(
     App(
       checkMode: isCheckMode(Uri.base),
       probe: FlutterSceneProbe(),
       officeView: FlutterSceneOfficeView(
         simulation: sim,
+        clock: clock,
         cameraYawDegrees: parseCameraYaw(Uri.base) ?? 0,
       ),
       officeData: data,
       simulation: sim,
+      virtualTime: clock,
     ),
   );
 }
@@ -40,6 +49,7 @@ class App extends StatelessWidget {
     required this.officeView,
     this.officeData,
     this.simulation,
+    this.virtualTime,
   });
 
   /// URL に `?check` があるか。true なら s0-check を表示する。
@@ -55,6 +65,9 @@ class App extends StatelessWidget {
   /// 3D と共有する人の動き。カードの「現在の行動」が読む。
   final PeopleSimulation? simulation;
 
+  /// 仮想時刻。null なら 0 秒固定。
+  final ValueListenable<Duration>? virtualTime;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -66,6 +79,7 @@ class App extends StatelessWidget {
               view: officeView,
               data: officeData ?? dummyOfficeData,
               simulation: simulation,
+              virtualTime: virtualTime,
             ),
     );
   }

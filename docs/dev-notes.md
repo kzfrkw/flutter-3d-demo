@@ -72,3 +72,31 @@
 - 制約: 3D 上の選択はマウス・タッチ専用(キーボードだけで選ぶ手段は T6 の一覧で提供)。3D 面の名札・パネルはテクスチャなので読み上げ対象外(同じ情報はカードで読める)。席は既定データでは全員「離席」(座る動きが無い)。
 - 未確認(QA で確かめる): WidgetComponent の板が `Scene.raycast` に当たるか(当たらなくても人・席・壁は当たる)、名札の文字の読みやすさ・左右反転、Esc がキャンバスにフォーカスがあっても効くか、4 方向の視点でのビルボード。
 - つまずき: ツールの `flutter test` が最初は pub.dev に接続しようとして失敗した。`XDG_CONFIG_HOME` を一時ディレクトリにして `flutter pub get --offline` を実行したあとはツール経由でも通った。
+
+## カメラ操作・状態の動的変化・読み込み/エラー(T5 / F5, F6)
+
+### カメラ
+- 純 Dart の `CameraOrbit`(`lib/office/scene/camera_orbit.dart`)が方位・仰角・ズーム・注視点を持つ。flutter_scene の `OrbitCameraController` は使わない(正射影のズームは `projection.zoom` で、透視向けの dolly と合わない。テストで flutter_scene の型を使いたくない)。builder は毎フレーム(`onTick`)、同じ `OrthographicCamera` の `position/target/projection.zoom/far` に値を書き写すだけ。
+- 向きの規約は `?cameraYaw` と同じ(方位 0 = 手前 -Z 側、正の値でカメラは -X 側へ回る)。右へドラッグ → 方位増、下へドラッグ → 仰角増(より見下ろす)、ホイールを奥へ → 拡大。
+- 上限: 仰角 15°〜80°、ズーム 0.6〜4.0、注視点は床 ± 1m。方位は自由(毎回 (-π, π] に正規化)。NaN/無限大の入力は無視、1 回のズーム倍率は [1/4, 4] に丸める。
+- 感度: 回転 0.006 rad/px(方位)・0.005 rad/px(仰角)、ホイール `exp(-dy × 0.0015)`。
+- 近遠面: 目は注視点から 2 × reach、near = 0、far = 4 × reach(T4 の `framing` は far が足りず、パンで遠い側が切れるため変更)。
+- 入力は `OrbitGestureLayer`(`Listener`)。マウス左 = 回転、右/中 = パン、ホイール/`PointerScaleEvent` = ズーム、タッチ 1 本 = 回転、2 本 = ピンチ + パン。スロップ(マウス 6px、タッチ 12px)以内で離した左ボタン/タッチだけがタップ(選択)。右クリックメニューは builder が `BrowserContextMenu.disableContextMenu()` で止める(Web のみ)。
+- [視点リセット]: OfficePage の `ViewResetSignal` → 描画の `resetView` 引数 → `orbit.reset()`(アニメーションなし)。
+
+### 仮想時刻
+- `VirtualClock`(`ValueListenable<Duration>`)を `main()` で 1 つ作り、`FlutterSceneOfficeView(clock:)` と `App(virtualTime:)` に渡す。進めるのは描画の `onTick`(人の動きと同じ場所)。実時間 1 倍、`OfficeData.cycleLength`(5 分)で一巡、250ms 刻みで通知。タブが裏に回ると `onTick` も止まり、仮想時刻も止まる(戻ると続きから)。
+- 開発者用 `?time=<秒>` で開始位置を指定できる(切り替わりの直前から見るため)。
+- 3D パネル・部屋の床・カードは同じ時計から `roomStatusAt` で導出する(別の導出は作らない)。席の在席/離席の導出は変えていない(T4 の決定のまま。今のデータでは全席「離席」)。
+
+### 部屋の見た目
+- 各会議室に薄い床の箱 `<roomId>#floor`(`BoxKind.roomFloor`)を足し、部屋ごとの材質の `baseColorFactor` を空き/使用中で書き換える(状態が変わった部屋だけ)。色は `status_style.dart` の `roomFloorColor` 1 か所。部屋の床のクリックは会議室の選択になる。
+- 注意: 「床以外の箱 = 障害物」とみなすテスト 2 か所では `roomFloor` も除外している。
+
+### 読み込み/エラー
+- `scene_loading.dart`(flutter_scene を import しない)に `SceneLoading`(10 秒超で補足)と `SceneErrorView`。
+- 判定: `isWebGL2Supported()`(`canvas.getContext('webgl2')`)が false なら初期化を試さず「WebGL2 非対応」、`Scene.initializeStaticResources()` 以降の例外は「読み込み失敗」(例外文字列は詳細に出す)。非 Web は判定しない。
+- [再読み込み]: Web はページ全体の再読み込み(`location.reload()`)。非 Web はシーンの初期化のやり直し。
+
+### Web での未確認点(QA で確認)
+flutter_scene は `flutter test` で動かないため、次は Chrome 実機で確認する: 材質の色の書き換えが再描画に反映されるか(効かなければ空き用・使用中用の 2 材質を作ってメッシュの材質を差し替える)、右クリックメニューの抑止(足りなければ `contextmenu` の `preventDefault`)、トラックパッドの 2 本指スクロール/ピンチが Scroll/Scale として届くか、部屋の床と床の Z ファイティング、WebGL2 を無効にした Chrome でのエラー表示。

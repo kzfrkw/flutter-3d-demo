@@ -2,18 +2,24 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../data/office_models.dart' hide Route;
 import '../people/people_simulation.dart';
 import '../status/office_status.dart';
-import 'camera_yaw.dart';
+import '../status/virtual_clock.dart';
+import '../status_style.dart';
+import 'browser_env.dart';
+import 'camera_gestures.dart';
+import 'camera_orbit.dart';
 import 'entity_pick.dart';
 import 'label_placement.dart';
 import 'office_layout.dart';
 import 'office_scene_view.dart';
 import 'scene_labels.dart';
+import 'scene_loading.dart';
 
 /// flutter_scene で実際に描く本物の実装。箱だけでオフィスを組む。
 /// Flutter GPU / WebGL2 が要るため `flutter test` では動かない(QA で確かめる)。
@@ -22,9 +28,13 @@ class FlutterSceneOfficeView implements OfficeSceneView {
     this.style = const LayoutStyle(),
     this.simulation,
     this.cameraYawDegrees = 0,
+    this.clock,
   });
 
   final LayoutStyle style;
+
+  /// 仮想時刻の時計。描画の onTick が進める。null なら進めない(0 秒固定)。
+  final VirtualClock? clock;
 
   /// 開発者用: 初期カメラの水平方向を Y 軸まわりに回す(度)。0 = 手前(-Z 側)。
   final double cameraYawDegrees;
@@ -39,13 +49,16 @@ class FlutterSceneOfficeView implements OfficeSceneView {
     OfficeData data, {
     ValueChanged<EntityRef?>? onPick,
     ValueListenable<Duration>? virtualTime,
+    ViewResetSignal? resetView,
   }) => _OfficeSceneWidget(
     data: data,
     style: style,
     simulation: simulation,
     cameraYawDegrees: cameraYawDegrees,
+    clock: clock,
     onPick: onPick,
-    virtualTime: virtualTime,
+    virtualTime: virtualTime ?? clock,
+    resetView: resetView,
   );
 }
 
@@ -55,8 +68,10 @@ class _OfficeSceneWidget extends StatefulWidget {
     required this.style,
     this.simulation,
     this.cameraYawDegrees = 0,
+    this.clock,
     this.onPick,
     this.virtualTime,
+    this.resetView,
   });
 
   final OfficeData data;
@@ -65,15 +80,60 @@ class _OfficeSceneWidget extends StatefulWidget {
   final double cameraYawDegrees;
   final ValueChanged<EntityRef?>? onPick;
   final ValueListenable<Duration>? virtualTime;
+  final VirtualClock? clock;
+  final ViewResetSignal? resetView;
 
   @override
   State<_OfficeSceneWidget> createState() => _OfficeSceneWidgetState();
 }
 
+/// 外側。非 Web の [再読み込み] は `_attempt++` で中の State(Scene と読み込み)を作り直す。
 class _OfficeSceneWidgetState extends State<_OfficeSceneWidget> {
+  int _attempt = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 右ドラッグ中のブラウザの右クリックメニューを出さない(3D ビューがある間だけ)。
+    if (kIsWeb) BrowserContextMenu.disableContextMenu();
+  }
+
+  @override
+  void dispose() {
+    if (kIsWeb) BrowserContextMenu.enableContextMenu();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _OfficeSceneBody(
+    key: ValueKey(_attempt),
+    widget: widget,
+    onRetry: () => setState(() => _attempt++),
+  );
+}
+
+class _OfficeSceneBody extends StatefulWidget {
+  const _OfficeSceneBody({
+    super.key,
+    required this.widget,
+    required this.onRetry,
+  });
+
+  final _OfficeSceneWidget widget;
+  final VoidCallback onRetry;
+
+  @override
+  State<_OfficeSceneBody> createState() => _OfficeSceneBodyState();
+}
+
+class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
+  _OfficeSceneWidget get _w => widget.widget;
   final Scene _scene = Scene();
   Camera? _camera;
-  String? _error;
+  CameraOrbit? _orbit;
+  SceneLoadFailure? _failure;
+  final Map<String, PhysicallyBasedMaterial> _roomFloorMaterials = {};
+  final Map<String, RoomOccupancy> _roomFloorShown = {};
   PeopleSimulation? _sim;
   final List<_PersonNode> _personNodes = [];
   final List<_TagNode> _tagNodes = [];
@@ -84,40 +144,74 @@ class _OfficeSceneWidgetState extends State<_OfficeSceneWidget> {
   @override
   void initState() {
     super.initState();
+    _w.resetView?.addListener(_onReset);
     _setUp();
   }
 
+  @override
+  void didUpdateWidget(_OfficeSceneBody old) {
+    super.didUpdateWidget(old);
+    if (old.widget.resetView != _w.resetView) {
+      old.widget.resetView?.removeListener(_onReset);
+      _w.resetView?.addListener(_onReset);
+    }
+  }
+
+  void _onReset() => _orbit?.reset();
+
   Future<void> _setUp() async {
+    // WebGL2 が無いと分かっているときは、初期化を試さずに原因を出す。
+    if (isWebGL2Supported() == false) {
+      _failure = const SceneLoadFailure(SceneLoadFailureKind.webgl2Unsupported);
+      if (mounted) setState(() {});
+      return;
+    }
     try {
       await Scene.initializeStaticResources();
-      final boxes = buildOfficeLayout(widget.data, style: widget.style);
-      _scene.add(_buildOfficeNode(boxes));
-      final sim = widget.simulation ?? PeopleSimulation(widget.data);
+      final boxes = buildOfficeLayout(_w.data, style: _w.style);
+      _scene.add(_buildOfficeNode(boxes, _roomFloorMaterials));
+      final sim = _w.simulation ?? PeopleSimulation(_w.data);
       _sim = sim;
-      _buildPeople(widget.data, sim);
-      _buildLabels(widget.data, sim);
-      _camera = _buildCamera(widget.data, boxes, widget.cameraYawDegrees);
+      _buildPeople(_w.data, sim);
+      _buildLabels(_w.data, sim);
+      final orbit = _buildOrbit(_w.data, boxes, _w.cameraYawDegrees);
+      _orbit = orbit;
+      _camera = _buildCamera(orbit);
+      _applyCamera();
+      _applyRoomFloors();
+      (_w.virtualTime ?? _zeroTime).addListener(_applyRoomFloors);
     } catch (e, st) {
       debugPrint('s1-office: $e\n$st');
-      _error = '$e';
+      _failure = SceneLoadFailure(
+        SceneLoadFailureKind.loadFailed,
+        detail: '$e',
+      );
     }
     if (mounted) setState(() {});
   }
 
+  /// [再読み込み]: Web ではページ全体を再読み込み(WebGL2 の状態を確実にやり直せる)。
+  /// それ以外はシーンの初期化からやり直す。
+  void _reload() {
+    if (!reloadPage()) widget.onRetry();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final error = _error;
-    if (error != null) {
-      return Center(child: Text('3D の読み込みに失敗しました: $error'));
+    final failure = _failure;
+    if (failure != null) {
+      return SceneErrorView(failure: failure, onReload: _reload);
     }
     final camera = _camera;
-    if (camera == null) {
-      return const Center(child: CircularProgressIndicator());
+    final orbit = _orbit;
+    if (camera == null || orbit == null) {
+      return const SceneLoading();
     }
-    return LayoutBuilder(
-      builder: (context, constraints) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapUp: (d) => _onTap(camera, d.localPosition, constraints.biggest),
+    return Semantics(
+      label: '3D オフィスビュー',
+      child: OrbitGestureLayer(
+        orbit: orbit,
+        onTap: (position, size) => _onTap(camera, position, size),
         child: SceneView(_scene, camera: camera, onTick: _onTick),
       ),
     );
@@ -125,24 +219,39 @@ class _OfficeSceneWidgetState extends State<_OfficeSceneWidget> {
 
   /// タップ位置 → レイ → 当たったノード名 → EntityRef。何も無い所は null(背景)。
   void _onTap(Camera camera, Offset position, Size size) {
-    final onPick = widget.onPick;
+    final onPick = _w.onPick;
     if (onPick == null) return;
+    _applyCamera();
     final hit = _scene.raycast(camera.screenPointToRay(position, size));
-    onPick(
-      hit == null ? null : entityRefForNodeName(hit.node.name, widget.data),
-    );
+    onPick(hit == null ? null : entityRefForNodeName(hit.node.name, _w.data));
   }
 
   @override
   void dispose() {
+    _w.resetView?.removeListener(_onReset);
+    (_w.virtualTime ?? _zeroTime).removeListener(_applyRoomFloors);
     _zeroTime.dispose();
     super.dispose();
+  }
+
+  /// 会議室の床の色を、パネル・カードと同じ roomStatusAt の結果に合わせる。
+  /// 変わった部屋の材質だけ書き換える。
+  void _applyRoomFloors() {
+    final t = (_w.virtualTime ?? _zeroTime).value;
+    for (final room in _w.data.rooms) {
+      final material = _roomFloorMaterials[room.id];
+      if (material == null) continue;
+      final occ = roomStatusAt(_w.data, room, t).occupancy;
+      if (_roomFloorShown[room.id] == occ) continue;
+      _roomFloorShown[room.id] = occ;
+      _setColor(material, roomFloorColor(occ).toARGB32());
+    }
   }
 
   /// 名札(人ごと)と会議室パネル(部屋ごと)を、人とは別の Node に載せる。
   void _buildLabels(OfficeData data, PeopleSimulation sim) {
     final labels = Node(name: 'labels');
-    final time = widget.virtualTime ?? _zeroTime;
+    final time = _w.virtualTime ?? _zeroTime;
     const update = WidgetUpdatePolicy.interval(Duration(milliseconds: 500));
     for (final walker in sim.walkers) {
       final person = data.personById(walker.personId);
@@ -258,8 +367,26 @@ class _OfficeSceneWidgetState extends State<_OfficeSceneWidget> {
 
   void _onTick(Duration elapsed, double dt) {
     _sim?.step(dt);
+    _w.clock?.advance(Duration(microseconds: (dt * 1e6).round()));
+    _applyCamera();
     _applyTransforms();
     _applyLabels();
+  }
+
+  /// CameraOrbit の姿勢を、SceneView に渡した同じ Camera に書き写す。
+  void _applyCamera() {
+    final camera = _camera;
+    final orbit = _orbit;
+    if (camera is! OrthographicCamera || orbit == null) return;
+    final frame = orbit.frame;
+    final pose = orbit.pose;
+    final eye = frame.eye(pose);
+    final target = frame.target(pose);
+    camera.position.setValues(eye.x, eye.y, eye.z);
+    camera.target.setValues(target.x, target.y, target.z);
+    camera.projection.zoom = pose.zoom;
+    camera.projection.near = 0;
+    camera.projection.far = frame.farDistance;
   }
 
   /// Walker の値を Node の変換に写す: T(x, bob, z) · Ry(yaw) · Rz(lean) · T(0, 0.8, 0)。
@@ -341,17 +468,26 @@ const List<int> _personPalette = [
 ];
 
 PhysicallyBasedMaterial _colorMaterial(int argb) => PhysicallyBasedMaterial()
-  ..baseColorFactor = vm.Vector4(
-    ((argb >> 16) & 0xFF) / 255,
-    ((argb >> 8) & 0xFF) / 255,
-    (argb & 0xFF) / 255,
-    ((argb >> 24) & 0xFF) / 255,
-  )
   ..metallicFactor = 0
-  ..roughnessFactor = 0.8;
+  ..roughnessFactor = 0.8
+  ..baseColorFactor = _argbToVector4(argb);
+
+vm.Vector4 _argbToVector4(int argb) => vm.Vector4(
+  ((argb >> 16) & 0xFF) / 255,
+  ((argb >> 8) & 0xFF) / 255,
+  (argb & 0xFF) / 255,
+  ((argb >> 24) & 0xFF) / 255,
+);
+
+void _setColor(PhysicallyBasedMaterial m, int argb) =>
+    m.baseColorFactor = _argbToVector4(argb);
 
 /// 箱の一覧から Node の木を作る。Node の name は [LayoutBox.id]。
-Node _buildOfficeNode(List<LayoutBox> boxes) {
+/// 会議室の床(`<roomId>#floor`)は部屋ごとの材質を [roomFloorMaterials] に入れて、色を後から変えられるようにする。
+Node _buildOfficeNode(
+  List<LayoutBox> boxes,
+  Map<String, PhysicallyBasedMaterial> roomFloorMaterials,
+) {
   final materials = <int, PhysicallyBasedMaterial>{};
   PhysicallyBasedMaterial materialFor(int argb) =>
       materials.putIfAbsent(argb, () {
@@ -373,13 +509,24 @@ Node _buildOfficeNode(List<LayoutBox> boxes) {
         vm.Vector3(box.center.x, box.bottomY + box.height / 2, box.center.z),
       )
       ..rotateY(box.yaw);
+    final ref = box.ref;
+    final PhysicallyBasedMaterial material;
+    if (box.kind == BoxKind.roomFloor && ref != null) {
+      material = PhysicallyBasedMaterial()
+        ..metallicFactor = 0
+        ..roughnessFactor = 0.9
+        ..baseColorFactor = _argbToVector4(box.color);
+      roomFloorMaterials[ref.id] = material;
+    } else {
+      material = materialFor(box.color);
+    }
     root.add(
       Node(
         name: box.id,
         localTransform: transform,
         mesh: Mesh(
           CuboidGeometry(vm.Vector3(box.width, box.height, box.depth)),
-          materialFor(box.color),
+          material,
         ),
       ),
     );
@@ -387,18 +534,39 @@ Node _buildOfficeNode(List<LayoutBox> boxes) {
   return root;
 }
 
-/// -Z 側(手前)の斜め上から全体を収める、固定のアイソメ風カメラ。
+/// 全体を収める枠・上限・初期姿勢から [CameraOrbit] を作る。
+/// 初期の見え方は T4 までの固定カメラ(-Z 側の斜め上、direction (0.35, 0.9, -1))と同じ。
 /// (3D 面に載せるウィジェットは -Z 側から見えるため、T4 の都合でこちら側に置く。)
-Camera _buildCamera(OfficeData data, List<LayoutBox> boxes, double yawDegrees) {
+CameraOrbit _buildOrbit(
+  OfficeData data,
+  List<LayoutBox> boxes,
+  double yawDegrees,
+) {
   final maxHeight = boxes.map((b) => b.bottomY + b.height).reduce(math.max);
   final minY = boxes.map((b) => b.bottomY).reduce(math.min);
-  final bounds = vm.Aabb3.minMax(
-    vm.Vector3(-data.floorSize.width / 2, minY, -data.floorSize.depth / 2),
-    vm.Vector3(data.floorSize.width / 2, maxHeight, data.floorSize.depth / 2),
+  final frame = OrbitFrame.fromBounds(
+    minX: -data.floorSize.width / 2,
+    minY: minY,
+    minZ: -data.floorSize.depth / 2,
+    maxX: data.floorSize.width / 2,
+    maxY: maxHeight,
+    maxZ: data.floorSize.depth / 2,
   );
-  final xz = rotateAboutY(0.35, -1, yawDegrees);
-  return OrthographicCamera.framing(
-    bounds,
-    direction: vm.Vector3(xz.x, 0.9, xz.z),
+  return CameraOrbit(
+    frame: frame,
+    limits: OrbitLimits.forFloor(data.floorSize),
+    initial: initialPose(frame, yawDegrees: yawDegrees),
   );
+}
+
+/// 初期姿勢の正射影カメラ。以降は同じインスタンスを毎フレーム更新する(_applyCamera)。
+Camera _buildCamera(CameraOrbit orbit) {
+  final frame = orbit.frame;
+  final camera = OrthographicCamera(
+    projection: OrthographicProjection(
+      size: OrthographicSize.contain(2 * frame.reach, 2 * frame.reach),
+      far: frame.farDistance,
+    ),
+  );
+  return camera;
 }

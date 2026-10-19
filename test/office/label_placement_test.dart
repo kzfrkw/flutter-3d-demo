@@ -61,7 +61,9 @@ void main() {
         final from = p.center.x - style.panelWidth / 2;
         final to = p.center.x + style.panelWidth / 2;
         for (final x in [from, p.center.x, to]) {
-          for (final b in boxes.where((b) => b.kind != BoxKind.floor)) {
+          for (final b in boxes.where(
+            (b) => b.kind != BoxKind.floor && b.kind != BoxKind.roomFloor,
+          )) {
             expect(
               b.containsPoint(FloorPoint(x, p.center.z)),
               isFalse,

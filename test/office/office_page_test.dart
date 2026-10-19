@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_3d_demo/office/data/office_models.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
 import 'package:flutter_3d_demo/office/people/people_simulation.dart';
 import 'package:flutter_3d_demo/office/status/office_status.dart';
+import 'package:flutter_3d_demo/office/status/virtual_clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_office_scene_view.dart';
@@ -19,6 +21,7 @@ Future<FakeOfficeSceneView> pumpPage(
   Size size = const Size(1000, 700),
   OfficeData? data,
   PeopleSimulation? simulation,
+  ValueListenable<Duration>? virtualTime,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -30,6 +33,7 @@ Future<FakeOfficeSceneView> pumpPage(
         view: fake,
         data: data ?? dummyOfficeData,
         simulation: simulation,
+        virtualTime: virtualTime,
       ),
     ),
   );
@@ -247,5 +251,86 @@ void main() {
     // Timer を止める
     fake.pick(null);
     await tester.pump();
+  });
+
+  group('視点リセット', () {
+    final button = find.byKey(const Key('reset-view-button'));
+
+    for (final size in [const Size(1000, 700), const Size(599, 800)]) {
+      testWidgets('${size.width.toInt()}px: 文言つきのボタンが 1 つ。押すと描画にリセットが届く', (
+        tester,
+      ) async {
+        final fake = await pumpPage(tester, size: size);
+        expect(button, findsOneWidget);
+        expect(
+          find.descendant(of: button, matching: find.text('視点リセット')),
+          findsOneWidget,
+        );
+        final signal = fake.receivedResetView;
+        expect(signal, isNotNull);
+        var n = 0;
+        signal!.addListener(() => n++);
+        await tester.tap(button);
+        await tester.pump();
+        expect(n, 1);
+        await tester.tap(button);
+        expect(n, 2);
+      });
+    }
+
+    testWidgets('スマホ幅でカードを開いてもボタンは出ている', (tester) async {
+      final fake = await pumpPage(tester, size: const Size(599, 800));
+      fake.pick(roomA);
+      await tester.pump();
+      expect(sheet, findsOneWidget);
+      expect(button, findsOneWidget);
+    });
+  });
+
+  group('仮想時刻とカード', () {
+    testWidgets('時刻が進むとカードの会議室の状態が roomStatusAt と一致して切り替わる', (tester) async {
+      final clock = VirtualClock(cycleLength: dummyOfficeData.cycleLength);
+      final fake = await pumpPage(tester, virtualTime: clock);
+      expect(identical(fake.receivedVirtualTime, clock), isTrue);
+      fake.pick(roomA);
+      await tester.pump();
+      final room = dummyOfficeData.roomById('room-a')!;
+      expect(
+        roomStatusAt(dummyOfficeData, room, clock.value).occupancy,
+        RoomOccupancy.free,
+      );
+      expect(
+        find.descendant(
+          of: side,
+          matching: find.text(RoomOccupancy.free.label),
+        ),
+        findsOneWidget,
+      );
+      clock.advance(const Duration(seconds: 30));
+      await tester.pump();
+      expect(
+        roomStatusAt(dummyOfficeData, room, clock.value).occupancy,
+        RoomOccupancy.occupied,
+      );
+      expect(
+        find.descendant(
+          of: side,
+          matching: find.text(RoomOccupancy.occupied.label),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: side,
+          matching: find.text(RoomOccupancy.free.label),
+        ),
+        findsNothing,
+      );
+      expect(find.textContaining('週次定例'), findsWidgets);
+      clock.advance(const Duration(seconds: 70));
+      await tester.pump();
+      expect(find.textContaining('週次定例'), findsNothing);
+      tester.binding.scheduleFrame();
+    });
   });
 }
