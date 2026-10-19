@@ -6,8 +6,10 @@ void main() {
   test('pubspec.yaml で flutter_scene が 0.24.3 に完全固定されている', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(
-      RegExp(r'^  flutter_scene: 0\.24\.3\s*$', multiLine: true)
-          .hasMatch(pubspec),
+      RegExp(
+        r'^  flutter_scene: 0\.24\.3\s*$',
+        multiLine: true,
+      ).hasMatch(pubspec),
       isTrue,
       reason: '^ や範囲指定を付けず flutter_scene: 0.24.3 と書く',
     );
@@ -16,8 +18,10 @@ void main() {
   test('environment.flutter が >=3.47.0', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(
-      RegExp(r'''^  flutter: ["']>=3\.47\.0["']\s*$''', multiLine: true)
-          .hasMatch(pubspec),
+      RegExp(
+        r'''^  flutter: ["']>=3\.47\.0["']\s*$''',
+        multiLine: true,
+      ).hasMatch(pubspec),
       isTrue,
     );
   });

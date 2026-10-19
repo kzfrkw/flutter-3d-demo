@@ -59,3 +59,16 @@
 - 10 人: `?people=10`(`people_count.dart`)で、追加の 4 人(席なし、既存の Waypoint をつなぐ Route)を足した OfficeData を渡す。
 - fps の実測(AC13): **未測定**。実装者の環境では Chrome を起動できず、QA または人の確認で測る。測ったら環境と値をここに書く。目安 30fps を割る場合は、鼻の Node を省く → カプセルの分割数(16/4)を減らす、の順に試す。
 - つまずき: ツールの `flutter test` は pub.dev に接続しようとして失敗する。実装者は `XDG_CONFIG_HOME` を一時ディレクトリにして `flutter pub get --offline` のあと `flutter test --no-pub` / `flutter analyze --no-pub` を Bash で実行した。
+
+## 3D 面上ウィジェットと情報カード(T4 / F4, F3)
+
+- 方式: 名札・会議室パネルは flutter_scene の `WidgetComponent`(`input: manual`、更新は 500ms 間隔)。T1 の教訓どおり、四角形は UV を左右逆にした `_mirroredQuad`(builder に複製)で、面の表は **ローカル -Z 側**。2D オーバーレイの代替は使っていない。
+- ノード名の規約: 既存の `<entityId>#<部位>` に `<personId>#tag`(名札)・`<roomId>#panel`(パネル)を追加。`entity_pick.dart` が `#` より前の id をデータの表(人 → 席 → 会議室)で引いて `EntityRef` にする(部位名は解釈しない)。床・外壁・データに無い id は null = 背景。
+- ビルボード: 名札・パネルは人の子ではなく別 Node(`labels`)。毎フレーム「位置を写す + `rotateY(billboardYaw(forward.x, forward.z))`」。正射影カメラなので `camera.forward` の水平成分を全ラベル共通で使う(`billboardYaw = atan2(dx, dz)`)。
+- 選択: `EntityRef?` を OfficePage が 1 つ持つ(`_select` が唯一の更新口)。3D は `OfficeSceneView.build` の省略可の `onPick` で通知。タップは `GestureDetector` → `camera.screenPointToRay` → `Scene.raycast` → ノード名。T6 の一覧も `_select` を呼べばよい。
+- カード: Stack で 3D の上に重ねる(3D を縮めない)。幅 600 未満(`officeNarrowBreakpoint`)は下シート(本体の 40%)、以上は右パネル(900 未満 320、以上 360)。`showModalBottomSheet` は 3D のタップを奪うので使わない。開いている間だけ 250ms の Timer で歩行中/停止中などを読み直す。
+- 色: 会議室の 2 状態は固定色で `lib/office/status_style.dart` の 1 か所(パネルとカードのピルが共有)。文言は `office_status.dart` の列挙の `label` だけ。
+- 視点指定(開発者用): `?cameraYaw=<度>`。0 = 手前(-Z 側)、90 = -X 側、180 = 奥(+Z 側)、-90 = +X 側。`rotateAboutY` のテストで固定。
+- 制約: 3D 上の選択はマウス・タッチ専用(キーボードだけで選ぶ手段は T6 の一覧で提供)。3D 面の名札・パネルはテクスチャなので読み上げ対象外(同じ情報はカードで読める)。席は既定データでは全員「離席」(座る動きが無い)。
+- 未確認(QA で確かめる): WidgetComponent の板が `Scene.raycast` に当たるか(当たらなくても人・席・壁は当たる)、名札の文字の読みやすさ・左右反転、Esc がキャンバスにフォーカスがあっても効くか、4 方向の視点でのビルボード。
+- つまずき: ツールの `flutter test` が最初は pub.dev に接続しようとして失敗した。`XDG_CONFIG_HOME` を一時ディレクトリにして `flutter pub get --offline` を実行したあとはツール経由でも通った。

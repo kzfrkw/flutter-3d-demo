@@ -9,16 +9,25 @@ import 'office/data/dummy_office_data.dart';
 import 'office/data/office_models.dart';
 import 'office/office_page.dart';
 import 'office/people/people_count.dart';
+import 'office/people/people_simulation.dart';
+import 'office/scene/camera_yaw.dart';
 import 'office/scene/office_scene_builder.dart';
 import 'office/scene/office_scene_view.dart';
 
 void main() {
+  final data = officeDataForUri(Uri.base, dummyOfficeData);
+  // 3D(名札の位置)とカード(現在の行動)で同じシミュレーションを共有する。
+  final sim = PeopleSimulation(data);
   runApp(
     App(
       checkMode: isCheckMode(Uri.base),
       probe: FlutterSceneProbe(),
-      officeView: const FlutterSceneOfficeView(),
-      officeData: officeDataForUri(Uri.base, dummyOfficeData),
+      officeView: FlutterSceneOfficeView(
+        simulation: sim,
+        cameraYawDegrees: parseCameraYaw(Uri.base) ?? 0,
+      ),
+      officeData: data,
+      simulation: sim,
     ),
   );
 }
@@ -30,6 +39,7 @@ class App extends StatelessWidget {
     required this.probe,
     required this.officeView,
     this.officeData,
+    this.simulation,
   });
 
   /// URL に `?check` があるか。true なら s0-check を表示する。
@@ -42,6 +52,9 @@ class App extends StatelessWidget {
   /// null なら [dummyOfficeData]。
   final OfficeData? officeData;
 
+  /// 3D と共有する人の動き。カードの「現在の行動」が読む。
+  final PeopleSimulation? simulation;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -49,7 +62,11 @@ class App extends StatelessWidget {
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.indigo)),
       home: checkMode
           ? CheckPage(probe: probe, env: EnvInfo.current())
-          : OfficePage(view: officeView, data: officeData ?? dummyOfficeData),
+          : OfficePage(
+              view: officeView,
+              data: officeData ?? dummyOfficeData,
+              simulation: simulation,
+            ),
     );
   }
 }
