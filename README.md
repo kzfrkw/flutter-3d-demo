@@ -8,7 +8,15 @@ Flutter と flutter_scene による 3D デモアプリ。主な対象は Web(Chr
 flutter run -d chrome
 ```
 
-URL の末尾に `?check` を付けて開くと、技術検証ページ s0-check が表示される(glTF 表示・3D 面へのウィジェット埋め込み・アニメ再生の OK/NG)。`?check` が無いときは仮のホームが出る。結果の記録は `docs/dev-notes.md`。
+URL の末尾に `?check` を付けて開くと、技術検証ページ s0-check が表示される(glTF 表示・3D 面へのウィジェット埋め込み・アニメ再生の OK/NG)。`?check` が無いときは s1-office(箱で組んだ架空オフィスの俯瞰/アイソメ表示。データはコード内固定のダミー)が出る。結果の記録は `docs/dev-notes.md`。
+
+## ファイル構成(`lib/office/`)
+
+- `data/`: `OfficeData` と、コード内固定のダミー(`dummy_office_data.dart`)。純 Dart で、描画ライブラリを import しない
+- `scene/`: `office_layout.dart`(`OfficeData` → 置く箱の一覧、純 Dart)、`office_scene_view.dart`(描画の差し替え口)、`office_scene_builder.dart`(flutter_scene で実際に描く唯一のファイル)
+- `office_page.dart`: s1-office の画面
+
+後続の置き場所の方針: 人の移動(T3)は `lib/office/people/`、クリック選択・情報カードなどの UI 連携(T4)は `lib/office/ui/` に足す。シーン側は ID(`EntityRef`、箱の `<entityId>#<部位>`)で `OfficeData` を参照し、値を書き写さない。
 
 ## 版の固定
 

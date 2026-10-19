@@ -47,4 +47,5 @@
 ## 素材の出典とライセンス
 
 - `assets/models/check_cube.glb`: `tool/make_check_model.py` で自作した、回転アニメ(`Spin`)付きの橙色の箱。**CC0 1.0**(第三者の素材を含まない)。再生成は `python3 tool/make_check_model.py`。
+- s1-office のオフィスは flutter_scene の `CuboidGeometry`(箱)で構成。第三者の素材なし(CC0 の家具モデルは使っていない)。
 - 骨格アニメ付きの CC0 モデルは未入手。骨格アニメの検証は、必要なら別途 CC0 の素材を入れて行う(今回の「アニメ再生」はノードのアニメーションの検証)。
