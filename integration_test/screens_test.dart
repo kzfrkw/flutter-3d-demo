@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_3d_demo/office/scene/scene_loading.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
 import 'package:flutter_3d_demo/office/people/people_simulation.dart';
 import 'package:flutter_3d_demo/office/scene/office_scene_view.dart';
+import 'package:flutter_3d_demo/office/scene/scene_loading.dart';
 import 'package:flutter_3d_demo/office/scene/scene_labels.dart';
 import 'package:flutter_3d_demo/office/status/office_status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,11 +13,11 @@ import 'package:integration_test/integration_test.dart';
 
 /// 3D の代わりに床色の面を出し、pick を外から起こせる偽の描画。
 class _FakeView implements OfficeSceneView {
-  ValueChanged<EntityRef?>? onPick;
-
   /// null なら床色の面。読み込み中・エラーの画面を出すときに渡す。
   _FakeView({this.child});
   final Widget? child;
+
+  ValueChanged<EntityRef?>? onPick;
 
   @override
   Widget build(
