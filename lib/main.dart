@@ -8,6 +8,7 @@ import 'check/flutter_scene_probe.dart';
 import 'check/scene_probe.dart';
 import 'office/data/dummy_office_data.dart';
 import 'office/data/office_models.dart';
+import 'office/guide/guide_memory.dart';
 import 'office/office_page.dart';
 import 'office/people/people_count.dart';
 import 'office/people/people_simulation.dart';
@@ -37,6 +38,8 @@ void main() {
       officeData: data,
       simulation: sim,
       virtualTime: clock,
+      // 案内を閉じたかはこのページを開いている間だけ覚える(保存・送信しない)。
+      guideMemory: GuideMemory(),
     ),
   );
 }
@@ -50,6 +53,7 @@ class App extends StatelessWidget {
     this.officeData,
     this.simulation,
     this.virtualTime,
+    this.guideMemory,
   });
 
   /// URL に `?check` があるか。true なら s0-check を表示する。
@@ -68,6 +72,9 @@ class App extends StatelessWidget {
   /// 仮想時刻。null なら 0 秒固定。
   final ValueListenable<Duration>? virtualTime;
 
+  /// 操作案内を閉じた記録。null なら OfficePage ごとに独立。
+  final GuideMemory? guideMemory;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -80,6 +87,7 @@ class App extends StatelessWidget {
               data: officeData ?? dummyOfficeData,
               simulation: simulation,
               virtualTime: virtualTime,
+              guideMemory: guideMemory,
             ),
     );
   }

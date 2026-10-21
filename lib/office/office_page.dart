@@ -6,17 +6,24 @@ import 'package:flutter/services.dart';
 
 import 'card/info_card.dart';
 import 'data/office_models.dart';
+import 'guide/guide_memory.dart';
+import 'guide/operation_guide.dart';
+import 'list/office_list_panel.dart';
 import 'people/people_simulation.dart';
 import 'scene/office_scene_view.dart';
 import 'status/office_status.dart';
+import 'toolbar/office_toolbar.dart';
 
-/// 幅がこれ未満なら下シート、以上なら右の固定パネルでカードを出す。
+/// 幅がこれ未満ならスマホ配置(下部ツールバー・下シート)、以上なら右の固定パネルでカードを出す。
 const double officeNarrowBreakpoint = 600;
+
+/// 幅がこれ以上のときだけ、一覧とカードを同時に出す(未満は片方を閉じる)。
+const double officeListBesideCardBreakpoint = 1100;
 
 /// [視点リセット] ボタンの文言。
 const String resetViewLabel = '視点リセット';
 
-/// s1-office と s2-card。3D のオフィス(差し替え口の向こう)の上に情報カードを重ねる。
+/// s1-office と s2-card・s3-guide・s4-list。3D のオフィス(差し替え口の向こう)の上に重ねる。
 class OfficePage extends StatefulWidget {
   const OfficePage({
     super.key,
@@ -24,6 +31,7 @@ class OfficePage extends StatefulWidget {
     required this.data,
     this.simulation,
     this.virtualTime,
+    this.guideMemory,
   });
 
   final OfficeSceneView view;
@@ -35,6 +43,9 @@ class OfficePage extends StatefulWidget {
   /// 仮想時刻。null なら Duration.zero 固定。
   final ValueListenable<Duration>? virtualTime;
 
+  /// 操作案内を閉じたかの記録(メモリ内)。null ならこのページ専用の記録を持つ(= 案内が出る)。
+  final GuideMemory? guideMemory;
+
   @override
   State<OfficePage> createState() => _OfficePageState();
 }
@@ -42,21 +53,99 @@ class OfficePage extends StatefulWidget {
 class _OfficePageState extends State<OfficePage> {
   final ValueNotifier<Duration> _fixedTime = ValueNotifier(Duration.zero);
   final ViewResetSignal _resetView = ViewResetSignal();
+  final FocusNode _pageFocus = FocusNode(debugLabel: 'office-page');
+  final FocusNode _listButtonFocus = FocusNode(debugLabel: 'list-button');
+  final FocusNode _helpButtonFocus = FocusNode(debugLabel: 'help-button');
+  late final GuideMemory _ownMemory = GuideMemory();
   EntityRef? _selected;
+  bool _guideOpen = false;
+  bool _listOpen = false;
+  double _width = 0;
   Timer? _timer;
 
+  GuideMemory get _memory => widget.guideMemory ?? _ownMemory;
   ValueListenable<Duration> get _time => widget.virtualTime ?? _fixedTime;
+  bool get _listBesideCard => _width >= officeListBesideCardBreakpoint;
 
-  /// 選択の唯一の更新口(3D の onPick・将来の一覧が呼ぶ)。
-  void _select(EntityRef? ref) {
-    if (ref == _selected) return;
-    setState(() => _selected = ref);
-    _syncTimer();
+  @override
+  void initState() {
+    super.initState();
+    _guideOpen = !_memory.dismissed;
   }
 
-  /// カードが出ている間だけ、歩行中/停止中などを読み直すタイマーを動かす。
+  /// 選択の唯一の更新口(3D の onPick・一覧・カードの × が呼ぶ)。
+  void _select(EntityRef? ref) {
+    if (ref == _selected) return;
+    final closesList = ref != null && _listOpen && !_listBesideCard;
+    setState(() {
+      _selected = ref;
+      // 狭い幅は一覧とカードを同時に出さない。
+      if (closesList) _listOpen = false;
+    });
+    _syncTimer();
+    _restoreFocus(preferred: closesList ? _listButtonFocus : null);
+  }
+
+  /// 3D の onPick。背景(null)ではカードと一覧を閉じる。案内は閉じない。
+  void _onPick(EntityRef? ref) {
+    if (ref != null) {
+      _select(ref);
+      return;
+    }
+    setState(() {
+      _selected = null;
+      _listOpen = false;
+    });
+    _syncTimer();
+    _restoreFocus();
+  }
+
+  void _openGuide() => setState(() => _guideOpen = true);
+
+  void _closeGuide() {
+    _memory.dismissed = true;
+    setState(() => _guideOpen = false);
+    _restoreFocus(preferred: _helpButtonFocus);
+  }
+
+  void _toggleList() {
+    setState(() {
+      _listOpen = !_listOpen;
+      if (_listOpen && !_listBesideCard) _selected = null;
+    });
+    _syncTimer();
+    if (!_listOpen) _restoreFocus(preferred: _listButtonFocus);
+  }
+
+  void _closeList() {
+    setState(() => _listOpen = false);
+    _syncTimer();
+    _restoreFocus(preferred: _listButtonFocus);
+  }
+
+  /// 案内 → カード → 一覧 の順に、開いている最初の 1 つだけ閉じる。
+  void _onEscape() {
+    if (_guideOpen) {
+      _closeGuide();
+    } else if (_selected != null) {
+      _select(null);
+    } else if (_listOpen) {
+      _closeList();
+    }
+  }
+
+  /// 閉じた部品の中にあったフォーカスが消えたら、開いたボタン(なければページ)へ戻す。
+  void _restoreFocus({FocusNode? preferred}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pageFocus.hasFocus) return;
+      final target = preferred?.context != null ? preferred! : _pageFocus;
+      target.requestFocus();
+    });
+  }
+
+  /// カードやタイマーのために、カードか一覧が出ている間だけ定期的に読み直す。
   void _syncTimer() {
-    if (_selected == null) {
+    if (_selected == null && !_listOpen) {
       _timer?.cancel();
       _timer = null;
     } else {
@@ -82,8 +171,8 @@ class _OfficePageState extends State<OfficePage> {
     super.didUpdateWidget(old);
     if (_selected != null && _statusOfSelected() == null) {
       _selected = null;
-      _syncTimer();
     }
+    _syncTimer();
   }
 
   @override
@@ -91,43 +180,91 @@ class _OfficePageState extends State<OfficePage> {
     _timer?.cancel();
     _fixedTime.dispose();
     _resetView.dispose();
+    _pageFocus.dispose();
+    _listButtonFocus.dispose();
+    _helpButtonFocus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Flutter Scene Demo (ダミーデータ)'),
-        actions: [
-          // 狭い幅は題名が欠けるので、ボタンは 3D の右上に重ねる(_buildBody)。
-          if (MediaQuery.sizeOf(context).width >= officeNarrowBreakpoint)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: TextButton.icon(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _onEscape,
+      },
+      child: Focus(
+        focusNode: _pageFocus,
+        autofocus: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            _width = constraints.maxWidth;
+            final narrow = _width < officeNarrowBreakpoint;
+            final items = <ToolbarItem>[
+              ToolbarItem(
                 key: const Key('reset-view-button'),
+                label: resetViewLabel,
+                icon: Icons.restart_alt,
                 onPressed: _resetView.reset,
-                icon: const Icon(Icons.restart_alt),
-                label: const Text(resetViewLabel),
               ),
-            ),
-        ],
-      ),
-      body: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () => _select(null),
-        },
-        child: Focus(
-          autofocus: true,
-          child: LayoutBuilder(builder: _buildBody),
+              ToolbarItem(
+                key: const Key('list-button'),
+                label: '一覧',
+                icon: Icons.list_alt,
+                onPressed: _toggleList,
+                selected: _listOpen,
+                focusNode: _listButtonFocus,
+              ),
+              ToolbarItem(
+                key: const Key('help-button'),
+                menuKey: const Key('menu-help'),
+                label: 'ヘルプ',
+                icon: Icons.help_outline,
+                onPressed: _openGuide,
+                inMenuOnNarrow: true,
+                focusNode: _helpButtonFocus,
+              ),
+            ];
+            final scaffold = Scaffold(
+              appBar: AppBar(
+                title: const Text(
+                  'Flutter Scene Demo (ダミーデータ)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                actions: narrow
+                    ? [OfficeMenuButton(items: items)]
+                    : officeToolbarActions(context, items),
+              ),
+              bottomNavigationBar: narrow
+                  ? OfficeBottomToolbar(items: items)
+                  : null,
+              body: LayoutBuilder(
+                builder: (context, body) => _buildBody(context, body, narrow),
+              ),
+            );
+            // 案内はツールバーも含めた全面を覆う(最前面)。
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                scaffold,
+                if (_guideOpen)
+                  Positioned.fill(
+                    child: OperationGuideOverlay(onClose: _closeGuide),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, BoxConstraints constraints) {
+  Widget _buildBody(
+    BuildContext context,
+    BoxConstraints constraints,
+    bool narrow,
+  ) {
     final scheme = Theme.of(context).colorScheme;
-    final narrow = constraints.maxWidth < officeNarrowBreakpoint;
     final card = _selected == null
         ? null
         : ListenableBuilder(
@@ -139,6 +276,16 @@ class _OfficePageState extends State<OfficePage> {
             },
           );
     final hasCard = card != null && _statusOfSelected() != null;
+    final list = _listOpen
+        ? OfficeListPanel(
+            data: widget.data,
+            time: _time,
+            lookup: personLookupOf(widget.simulation),
+            selected: hasCard ? _selected : null,
+            onSelect: _select,
+            onClose: _closeList,
+          )
+        : null;
 
     return Stack(
       children: [
@@ -146,20 +293,40 @@ class _OfficePageState extends State<OfficePage> {
           child: widget.view.build(
             context,
             widget.data,
-            onPick: _select,
+            onPick: _onPick,
             virtualTime: _time,
             resetView: _resetView,
           ),
         ),
-        if (narrow)
+        if (list != null && !narrow)
           Positioned(
-            top: 8,
-            right: 8,
-            child: FilledButton.tonalIcon(
-              key: const Key('reset-view-button'),
-              onPressed: _resetView.reset,
-              icon: const Icon(Icons.restart_alt),
-              label: const Text(resetViewLabel),
+            key: const Key('list-panel-side'),
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: _listBesideCard ? 300 : 280,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: scheme.outlineVariant)),
+              ),
+              child: list,
+            ),
+          ),
+        if (list != null && narrow)
+          Positioned(
+            key: const Key('list-sheet'),
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: constraints.maxHeight * 0.7,
+            child: Material(
+              color: scheme.surfaceContainerLow,
+              elevation: 3,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: list,
             ),
           ),
         if (hasCard && !narrow)

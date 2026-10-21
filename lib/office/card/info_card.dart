@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/office_models.dart';
 import '../status/office_status.dart';
 import '../status_style.dart';
+import 'status_pill.dart';
 
 /// s2-card。席・会議室・人の情報カード。状態を受け取って表示するだけ。
 class InfoCard extends StatelessWidget {
@@ -28,7 +29,7 @@ class InfoCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final kind = _kindLabel(status);
-    final pill = _StatusPill(style: pillStyleOf(status, scheme));
+    final pill = StatusPill(style: pillStyleOf(status, scheme));
     final rows = switch (status) {
       final RoomStatus s => [
         _InfoRow(label: '状態', child: pill),
@@ -178,44 +179,6 @@ class _BookingText extends StatelessWidget {
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.style});
-
-  final StatusPillStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: ShapeDecoration(
-        color: style.background,
-        shape: StadiumBorder(
-          side: style.border == null
-              ? BorderSide.none
-              : BorderSide(color: style.border!, width: 2),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ExcludeSemantics(
-            child: Icon(style.icon, size: 18, color: style.foreground),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            style.label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: style.foreground,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

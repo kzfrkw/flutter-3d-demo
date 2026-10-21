@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
+import 'package:flutter_3d_demo/office/guide/guide_memory.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
 import 'package:flutter_3d_demo/office/people/people_simulation.dart';
 import 'package:flutter_3d_demo/office/scene/office_scene_view.dart';
@@ -70,6 +71,7 @@ void main() {
       data: dummyOfficeData,
       simulation: sim,
       virtualTime: ValueNotifier(time),
+      guideMemory: GuideMemory(dismissed: true),
     );
     if (width != null) {
       page = Align(
@@ -190,6 +192,7 @@ void main() {
               view: view,
               data: dummyOfficeData,
               virtualTime: ValueNotifier(Duration.zero),
+              guideMemory: GuideMemory(dismissed: true),
             ),
             width,
           ),
@@ -253,5 +256,73 @@ void main() {
       width: 390,
     );
     await shoot(tester, 's1-error-load-narrow');
+  });
+
+  /// 案内・一覧・ツールバーの画面(T6)。pumpAndSettle は一覧の定期更新と相性が悪いので pump で進める。
+  testWidgets('s3 guide / s4 list screens', (tester) async {
+    const roomB = EntityRef(EntityKind.room, 'room-b');
+    Future<_FakeView> open({double? width, bool dismissed = true}) async {
+      final view = _FakeView();
+      await tester.pumpWidget(
+        app(
+          sized(
+            OfficePage(
+              view: view,
+              data: dummyOfficeData,
+              virtualTime: ValueNotifier(const Duration(seconds: 30)),
+              guideMemory: GuideMemory(dismissed: dismissed),
+            ),
+            width,
+          ),
+        ),
+      );
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pump();
+      return view;
+    }
+
+    Future<void> shootNow(String name) async {
+      await tester.pump(const Duration(milliseconds: 300));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      await tester.pump();
+      await binding.takeScreenshot(name);
+    }
+
+    Future<void> tapKey(String key) async {
+      await tester.tap(find.byKey(Key(key)));
+      await tester.pump();
+    }
+
+    await open(dismissed: false);
+    await shootNow('s3-guide');
+    await open(width: 390, dismissed: false);
+    await shootNow('s3-guide-sheet');
+
+    await open();
+    await shootNow('s1-toolbar-pc');
+    await tapKey('list-button');
+    await shootNow('s4-list');
+    await tester.tap(find.byKey(const ValueKey('list-item-room-room-b')));
+    await tester.pump();
+    await shootNow('s4-list-card');
+
+    await open(width: 800);
+    await tapKey('list-button');
+    await tester.tap(find.byKey(const ValueKey('list-item-room-room-b')));
+    await tester.pump();
+    await shootNow('s4-list-card-narrow');
+
+    await open(width: 390);
+    await tapKey('list-button');
+    await shootNow('s4-list-sheet');
+
+    final view = await open(width: 390);
+    view.onPick!(roomB);
+    await tester.pump();
+    await shootNow('s1-toolbar-bottom');
+
+    await open(width: 390);
+    await tapKey('menu-button');
+    await shootNow('s1-menu');
   });
 }

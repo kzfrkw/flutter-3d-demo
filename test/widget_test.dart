@@ -5,6 +5,7 @@ import 'package:flutter_3d_demo/check/scene_probe.dart';
 import 'package:flutter_3d_demo/main.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
+import 'package:flutter_3d_demo/office/guide/guide_memory.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
 import 'package:flutter_3d_demo/office/people/people_simulation.dart';
 import 'package:flutter_3d_demo/office/status/office_status.dart';
@@ -72,5 +73,25 @@ void main() {
     expect(find.text(PersonActivity.walking.label), findsOneWidget);
     fake.pick(null);
     await tester.pump();
+  });
+
+  testWidgets('App の guideMemory が OfficePage に届く', (tester) async {
+    final memory = GuideMemory(dismissed: true);
+    await tester.pumpWidget(
+      App(
+        checkMode: false,
+        probe: _NoopProbe(),
+        officeView: FakeOfficeSceneView(),
+        guideMemory: memory,
+      ),
+    );
+    expect(
+      identical(
+        tester.widget<OfficePage>(find.byType(OfficePage)).guideMemory,
+        memory,
+      ),
+      isTrue,
+    );
+    expect(find.byKey(const Key('guide-start-button')), findsNothing);
   });
 }
