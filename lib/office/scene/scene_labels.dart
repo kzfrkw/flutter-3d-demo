@@ -44,6 +44,55 @@ class PersonTag extends StatelessWidget {
   }
 }
 
+/// 自分の名札に出す文言。
+const String avatarTagLabel = 'あなた';
+
+/// 自分(操作できる人)の名札(論理サイズ 180×54)。黄色の地 + 人型アイコン + 「あなた」で、
+/// 歩く人の名札と色・形・文言の 3 つで見分ける。
+class AvatarTag extends StatelessWidget {
+  const AvatarTag({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery.withNoTextScaling(
+      child: Material(
+        type: MaterialType.transparency,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: avatarTagBackground,
+            border: Border.all(color: avatarTagForeground, width: 2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.person, size: 28, color: avatarTagForeground),
+                    SizedBox(width: 4),
+                    Text(
+                      avatarTagLabel,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: avatarTagForeground,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 会議室パネルの中身(論理サイズ 144×96 を想定)。状態で色・アイコン・文言が変わる。
 class RoomPanel extends StatelessWidget {
   const RoomPanel({super.key, required this.status});

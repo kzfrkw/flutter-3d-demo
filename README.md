@@ -17,7 +17,7 @@ URL の末尾に `?check` を付けて開くと、技術検証ページ s0-check
 
 - `data/`: `OfficeData` と、コード内固定のダミー(`dummy_office_data.dart`)。純 Dart で、描画ライブラリを import しない
 - `scene/`: `office_layout.dart`(`OfficeData` → 置く箱の一覧、純 Dart)、`office_scene_view.dart`(描画の差し替え口)、`office_scene_builder.dart`(flutter_scene で実際に描く唯一のファイル)
-- `people/`: 人の移動(純 Dart)。`people_simulation.dart`(歩行者の状態・区間の移動・向き・揺れ・停滞の検出)、`route_planner.dart`(neighbors 上の最短経路)、`people_count.dart`(`?people=N` の解釈)
+- `people/`: 人の移動(純 Dart)。`people_simulation.dart`(歩行者の状態・区間の移動・向き・揺れ・停滞の検出)、`route_planner.dart`(neighbors 上の最短経路)、`people_count.dart`(`?people=N` の解釈)、`avatar_controller.dart`・`avatar_collision.dart`(十字キーで動かす自分と、壁・机・椅子との当たり判定)
 - `card/`・`guide/`・`list/`・`toolbar/`・`status/`: 情報カード、操作案内、2D 一覧、ツールバー、仮想時刻と会議室の状態
 - `office_page.dart`: s1-office の画面
 

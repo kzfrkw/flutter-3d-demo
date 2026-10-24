@@ -10,6 +10,7 @@ import 'office/data/dummy_office_data.dart';
 import 'office/data/office_models.dart';
 import 'office/guide/guide_memory.dart';
 import 'office/office_page.dart';
+import 'office/people/avatar_controller.dart';
 import 'office/people/people_count.dart';
 import 'office/people/people_simulation.dart';
 import 'office/scene/camera_yaw.dart';
@@ -26,6 +27,8 @@ void main() {
     cycleLength: data.cycleLength,
     start: parseVirtualTimeStart(Uri.base, data.cycleLength) ?? Duration.zero,
   );
+  // 十字キーで動かす自分。3D(描画)とページ(キー入力)で同じものを共有する。
+  final avatar = AvatarController.forOffice(data);
   runApp(
     App(
       checkMode: isCheckMode(Uri.base),
@@ -33,10 +36,12 @@ void main() {
       officeView: FlutterSceneOfficeView(
         simulation: sim,
         clock: clock,
+        avatar: avatar,
         cameraYawDegrees: parseCameraYaw(Uri.base) ?? 0,
       ),
       officeData: data,
       simulation: sim,
+      avatar: avatar,
       virtualTime: clock,
       // 案内を閉じたかはこのページを開いている間だけ覚える(保存・送信しない)。
       guideMemory: GuideMemory(),
@@ -52,6 +57,7 @@ class App extends StatelessWidget {
     required this.officeView,
     this.officeData,
     this.simulation,
+    this.avatar,
     this.virtualTime,
     this.guideMemory,
   });
@@ -68,6 +74,9 @@ class App extends StatelessWidget {
 
   /// 3D と共有する人の動き。カードの「現在の行動」が読む。
   final PeopleSimulation? simulation;
+
+  /// 十字キーで動かす自分。3D と共有する。null なら十字キーは何もしない。
+  final AvatarController? avatar;
 
   /// 仮想時刻。null なら 0 秒固定。
   final ValueListenable<Duration>? virtualTime;
@@ -86,6 +95,7 @@ class App extends StatelessWidget {
               view: officeView,
               data: officeData ?? dummyOfficeData,
               simulation: simulation,
+              avatar: avatar,
               virtualTime: virtualTime,
               guideMemory: guideMemory,
             ),

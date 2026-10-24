@@ -50,6 +50,10 @@ Color roomFloorColor(RoomOccupancy o) => switch (o) {
 const Color personTagBackground = Color(0xFF263238);
 const Color personTagForeground = Color(0xFFFFFFFF);
 
+/// 自分(操作できる人)の名札。鼻・足元の印と同じ黄色の地に濃い紺の文字(約 11:1)。
+const Color avatarTagBackground = Color(0xFFFFE066);
+const Color avatarTagForeground = Color(0xFF263238);
+
 /// 対象の種類ごとの状態ピルの見た目。席・人はテーマの色を使う。
 StatusPillStyle pillStyleOf(TargetStatus status, ColorScheme scheme) =>
     switch (status) {

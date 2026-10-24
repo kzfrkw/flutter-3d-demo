@@ -7,6 +7,7 @@ import 'package:flutter_scene/scene.dart' hide Material;
 import 'package:vector_math/vector_math.dart' as vm;
 
 import '../data/office_models.dart' hide Route;
+import '../people/avatar_controller.dart';
 import '../people/people_simulation.dart';
 import '../status/office_status.dart';
 import '../status/virtual_clock.dart';
@@ -29,6 +30,7 @@ class FlutterSceneOfficeView implements OfficeSceneView {
     this.simulation,
     this.cameraYawDegrees = 0,
     this.clock,
+    this.avatar,
   });
 
   final LayoutStyle style;
@@ -43,6 +45,9 @@ class FlutterSceneOfficeView implements OfficeSceneView {
   /// (T4 で名札などと共有するため)。
   final PeopleSimulation? simulation;
 
+  /// 十字キーで動かす自分。null なら出さない。OfficePage と同じものを共有する。
+  final AvatarController? avatar;
+
   @override
   Widget build(
     BuildContext context,
@@ -54,6 +59,7 @@ class FlutterSceneOfficeView implements OfficeSceneView {
     data: data,
     style: style,
     simulation: simulation,
+    avatar: avatar,
     cameraYawDegrees: cameraYawDegrees,
     clock: clock,
     onPick: onPick,
@@ -67,6 +73,7 @@ class _OfficeSceneWidget extends StatefulWidget {
     required this.data,
     required this.style,
     this.simulation,
+    this.avatar,
     this.cameraYawDegrees = 0,
     this.clock,
     this.onPick,
@@ -77,6 +84,7 @@ class _OfficeSceneWidget extends StatefulWidget {
   final OfficeData data;
   final LayoutStyle style;
   final PeopleSimulation? simulation;
+  final AvatarController? avatar;
   final double cameraYawDegrees;
   final ValueChanged<EntityRef?>? onPick;
   final ValueListenable<Duration>? virtualTime;
@@ -135,6 +143,9 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
   final Map<String, PhysicallyBasedMaterial> _roomFloorMaterials = {};
   final Map<String, RoomOccupancy> _roomFloorShown = {};
   PeopleSimulation? _sim;
+  AvatarController? _avatar;
+  Node? _avatarBody;
+  Node? _avatarMark;
   final List<_PersonNode> _personNodes = [];
   final List<_TagNode> _tagNodes = [];
   final List<_PanelNode> _panelNodes = [];
@@ -173,6 +184,7 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
       final sim = _w.simulation ?? PeopleSimulation(_w.data);
       _sim = sim;
       _buildPeople(_w.data, sim);
+      _buildAvatar(_w.avatar);
       _buildLabels(_w.data, sim);
       final orbit = _buildOrbit(_w.data, boxes, _w.cameraYawDegrees);
       _orbit = orbit;
@@ -272,7 +284,27 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
         ),
       );
       labels.add(node);
-      _tagNodes.add(_TagNode(walker, node));
+      _tagNodes.add(_TagNode(() => walker.position, node));
+    }
+    final avatar = _avatar;
+    if (avatar != null) {
+      final node = Node(name: avatarTagNodeName());
+      node.addComponent(
+        WidgetComponent(
+          size: const Size(180, 54),
+          pixelRatio: 2,
+          worldHeight: _labelStyle.tagHeight,
+          geometry: _mirroredQuad(
+            width: _labelStyle.tagWidth,
+            height: _labelStyle.tagHeight,
+          ),
+          input: WidgetInput.manual,
+          update: update,
+          child: const AvatarTag(),
+        ),
+      );
+      labels.add(node);
+      _tagNodes.add(_TagNode(() => avatar.position, node));
     }
     for (final room in data.rooms) {
       final place = panelPlacement(room, style: _labelStyle);
@@ -311,7 +343,7 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
   void _applyLabels() {
     final yaw = _billboardYaw();
     for (final t in _tagNodes) {
-      final c = tagCenter(t.walker.position, style: _labelStyle);
+      final c = tagCenter(t.position(), style: _labelStyle);
       t.node.mutateLocalTransform((m) {
         m
           ..setIdentity()
@@ -365,8 +397,55 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
     _applyTransforms();
   }
 
+  /// 自分の体(カプセル + 鼻)と足元の印。ノード名は `player#...`(クリックは背景扱い)。
+  void _buildAvatar(AvatarController? avatar) {
+    if (avatar == null) return;
+    _avatar = avatar;
+    final body = Node(
+      name: avatarBodyNodeName(),
+      mesh: Mesh(
+        CapsuleGeometry(
+          radius: personRadius,
+          height: personHeight - 2 * personRadius,
+          radialSegments: 16,
+          capRings: 4,
+        ),
+        _colorMaterial(_avatarColor),
+      ),
+    );
+    body.add(
+      Node(
+        name: avatarNoseNodeName(),
+        localTransform: vm.Matrix4.translation(vm.Vector3(0, 0.5, 0.27)),
+        mesh: Mesh(
+          CuboidGeometry(vm.Vector3(0.14, 0.14, 0.2)),
+          _colorMaterial(_noseColor),
+        ),
+      ),
+    );
+    // 足元の印: 体とは別 Node。x, z だけ追従する(向き・揺れは写さない)。
+    final mark = Node(
+      name: avatarMarkNodeName(),
+      mesh: Mesh(
+        CuboidGeometry(vm.Vector3(_avatarMarkSize, 0.02, _avatarMarkSize)),
+        _colorMaterial(_avatarMarkColor),
+      ),
+    );
+    final root = Node(name: 'avatar')
+      ..add(body)
+      ..add(mark);
+    _scene.add(root);
+    _avatarBody = body;
+    _avatarMark = mark;
+    _applyTransforms();
+  }
+
   void _onTick(Duration elapsed, double dt) {
     _sim?.step(dt);
+    final orbit = _orbit;
+    if (orbit != null) {
+      _avatar?.step(dt, view: orbit.frame.groundAxes(orbit.pose));
+    }
     _w.clock?.advance(Duration(microseconds: (dt * 1e6).round()));
     _applyCamera();
     _applyTransforms();
@@ -402,6 +481,22 @@ class _OfficeSceneBodyState extends State<_OfficeSceneBody> {
           ..translateByDouble(0, personHeight / 2, 0, 1);
       });
     }
+    final a = _avatar;
+    if (a == null) return;
+    _avatarBody?.mutateLocalTransform((m) {
+      m
+        ..setIdentity()
+        ..setTranslationRaw(a.x, a.bob, a.z)
+        ..rotateY(a.yaw)
+        ..rotateZ(a.lean)
+        ..translateByDouble(0, personHeight / 2, 0, 1);
+    });
+    // 会議室の床(高さ 0.02)の上に重ならない高さ。
+    _avatarMark?.mutateLocalTransform((m) {
+      m
+        ..setIdentity()
+        ..setTranslationRaw(a.x, 0.04, a.z);
+    });
   }
 }
 
@@ -413,9 +508,10 @@ class _PersonNode {
 }
 
 class _TagNode {
-  _TagNode(this.walker, this.node);
+  _TagNode(this.position, this.node);
 
-  final Walker walker;
+  /// 名札の下の人の床面位置(歩く人・自分で共通)。
+  final FloorPoint Function() position;
   final Node node;
 }
 
@@ -452,6 +548,11 @@ MeshGeometry _mirroredQuad({required double width, required double height}) {
 }
 
 const int _noseColor = 0xFFFFE066;
+
+/// 自分の体(ほぼ黒)。歩く人のパレットのどれとも違う。足元の印は鼻と同じ黄色の薄い板。
+const int _avatarColor = 0xFF212121;
+const int _avatarMarkColor = 0xFFFFE066;
+const double _avatarMarkSize = 1.0;
 
 /// 人ごとの色(OfficeData の people の順に使う)。
 const List<int> _personPalette = [

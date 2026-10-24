@@ -136,6 +136,7 @@ void main() {
                       name: dummyOfficeData.people.first.displayName,
                     ),
                   ),
+                  const SizedBox(width: 180, height: 54, child: AvatarTag()),
                   for (final r in [rooms[0], rooms[1]])
                     SizedBox(
                       width: 144,

@@ -18,6 +18,12 @@ Widget host(Widget child) => MaterialApp(
 );
 
 void main() {
+  testWidgets('AvatarTag は「あなた」と人型アイコンを出す(#12)', (tester) async {
+    await tester.pumpWidget(host(const AvatarTag()));
+    expect(find.text(avatarTagLabel), findsOneWidget);
+    expect(find.byIcon(Icons.person), findsOneWidget);
+  });
+
   testWidgets('PersonTag は表示名を出す', (tester) async {
     await tester.pumpWidget(host(const PersonTag(name: 'メンバーA')));
     expect(find.text('メンバーA'), findsOneWidget);
