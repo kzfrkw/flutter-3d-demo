@@ -10,6 +10,7 @@ import 'data/office_models.dart';
 import 'guide/guide_memory.dart';
 import 'guide/operation_guide.dart';
 import 'list/office_list_panel.dart';
+import 'people/avatar_controller.dart';
 import 'people/people_simulation.dart';
 import 'scene/office_scene_view.dart';
 import 'status/office_status.dart';
@@ -34,6 +35,7 @@ class OfficePage extends StatefulWidget {
     this.virtualTime,
     this.guideMemory,
     this.notesLoader,
+    this.avatar,
   });
 
   final OfficeSceneView view;
@@ -51,11 +53,21 @@ class OfficePage extends StatefulWidget {
   /// 開発記録の本文の読み込み口。null なら DevNotesPage の既定(rootBundle)。
   final DevNotesLoader? notesLoader;
 
+  /// 十字キーで動かす自分。3D の描画と共有する。null なら十字キーは何もしない。
+  final AvatarController? avatar;
+
   @override
   State<OfficePage> createState() => _OfficePageState();
 }
 
-class _OfficePageState extends State<OfficePage> {
+class _OfficePageState extends State<OfficePage> with WidgetsBindingObserver {
+  static final _keyMap = {
+    LogicalKeyboardKey.arrowUp: AvatarKey.forward,
+    LogicalKeyboardKey.arrowDown: AvatarKey.back,
+    LogicalKeyboardKey.arrowLeft: AvatarKey.left,
+    LogicalKeyboardKey.arrowRight: AvatarKey.right,
+  };
+
   final ValueNotifier<Duration> _fixedTime = ValueNotifier(Duration.zero);
   final ViewResetSignal _resetView = ViewResetSignal();
   final FocusNode _pageFocus = FocusNode(debugLabel: 'office-page');
@@ -64,6 +76,9 @@ class _OfficePageState extends State<OfficePage> {
   late final GuideMemory _ownMemory = GuideMemory();
   EntityRef? _selected;
   bool _guideOpen = false;
+
+  /// 案内を [ヘルプ] から開いたか(閉じたときのフォーカス先を決める)。
+  bool _guideFromHelp = false;
   bool _listOpen = false;
   double _width = 0;
   Timer? _timer;
@@ -76,6 +91,37 @@ class _OfficePageState extends State<OfficePage> {
   void initState() {
     super.initState();
     _guideOpen = !_memory.dismissed;
+    _pageFocus.addListener(_onPageFocusChange);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _onPageFocusChange() {
+    if (!_pageFocus.hasPrimaryFocus) widget.avatar?.releaseAll();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) widget.avatar?.releaseAll();
+  }
+
+  /// 十字キー → 自分の操作。ページ自身が主フォーカスのときだけ受ける
+  /// (一覧の行・ボタンなど子孫にフォーカスがあるときは、その部品の働きを優先する)。
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final avatar = widget.avatar;
+    final key = _keyMap[event.logicalKey];
+    if (avatar == null || key == null) return KeyEventResult.ignored;
+    if (!_pageFocus.hasPrimaryFocus) return KeyEventResult.ignored;
+    if (event is KeyUpEvent) {
+      avatar.setKey(key, false);
+      return KeyEventResult.handled;
+    }
+    if (_guideOpen) return KeyEventResult.ignored;
+    final kb = HardwareKeyboard.instance;
+    if (kb.isMetaPressed || kb.isControlPressed || kb.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    avatar.setKey(key, true);
+    return KeyEventResult.handled;
   }
 
   /// 選択の唯一の更新口(3D の onPick・一覧・カードの × が呼ぶ)。
@@ -95,14 +141,16 @@ class _OfficePageState extends State<OfficePage> {
   void _onPick(EntityRef? ref) {
     if (ref != null) {
       _select(ref);
-      return;
+    } else {
+      setState(() {
+        _selected = null;
+        _listOpen = false;
+      });
+      _syncTimer();
+      _restoreFocus();
     }
-    setState(() {
-      _selected = null;
-      _listOpen = false;
-    });
-    _syncTimer();
-    _restoreFocus();
+    // 3D をクリックしたら十字キーが効くよう、ページにフォーカスを戻す。
+    _pageFocus.requestFocus();
   }
 
   void _openNotes() {
@@ -113,12 +161,19 @@ class _OfficePageState extends State<OfficePage> {
     );
   }
 
-  void _openGuide() => setState(() => _guideOpen = true);
+  void _openGuide() {
+    widget.avatar?.releaseAll();
+    setState(() {
+      _guideOpen = true;
+      _guideFromHelp = true;
+    });
+  }
 
   void _closeGuide() {
     _memory.dismissed = true;
     setState(() => _guideOpen = false);
-    _restoreFocus(preferred: _helpButtonFocus);
+    // 起動時に自動で開いた案内には開いたボタンが無い。ページへ戻して十字キーを効かせる。
+    _restoreFocus(preferred: _guideFromHelp ? _helpButtonFocus : null);
   }
 
   void _toggleList() {
@@ -190,6 +245,9 @@ class _OfficePageState extends State<OfficePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pageFocus.removeListener(_onPageFocusChange);
+    widget.avatar?.releaseAll();
     _timer?.cancel();
     _fixedTime.dispose();
     _resetView.dispose();
@@ -206,6 +264,7 @@ class _OfficePageState extends State<OfficePage> {
       child: Focus(
         focusNode: _pageFocus,
         autofocus: true,
+        onKeyEvent: _onKey,
         child: LayoutBuilder(
           builder: (context, constraints) {
             _width = constraints.maxWidth;

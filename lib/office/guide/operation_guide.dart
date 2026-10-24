@@ -6,6 +6,9 @@ const String guideLearn1 = '3D のオフィスを人が歩く';
 const String guideLearn2 = '3D の上に Flutter ウィジェットを載せる';
 const String guideOperationHeading = '操作';
 const String guideTouch = 'タッチ操作:1本指ドラッグで回転、ピンチでズーム、タップで詳細';
+const String guideArrowsLabel = '十字キー';
+const String guideArrows = '自分を動かす(↑↓←→ で画面の上下左右へ)';
+const String guideArrowsNote = '十字キーは PC のキーボード用です。効かないときは 3D を一度クリックしてください。';
 const String guideDeveloperHeading = 'Flutter 開発者の方へ';
 const String guideHotReload =
     '色や配置はコードを変えるとホットリロードですぐ反映できます。'
@@ -139,6 +142,19 @@ class OperationGuideOverlay extends StatelessWidget {
                                     const Key('guide-op-click'),
                                     'クリック',
                                     '会議室・席・人の詳細を見る',
+                                  ),
+                                  op(
+                                    const Key('guide-op-arrows'),
+                                    guideArrowsLabel,
+                                    guideArrows,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    guideArrowsNote,
+                                    key: const Key('guide-arrows-note'),
+                                    style: text.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(

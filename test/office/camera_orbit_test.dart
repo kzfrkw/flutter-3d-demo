@@ -67,6 +67,36 @@ void main() {
     });
   });
 
+  group('groundAxes(#12)', () {
+    test('単位ベクトルで直交し、pan の右と同じ符号', () {
+      for (final yaw in [0.0, 90.0, 180.0, -90.0, 37.0]) {
+        final f = _frame();
+        final pose = initialPose(f, yawDegrees: yaw);
+        final a = f.groundAxes(pose);
+        expect(
+          math.sqrt(a.forwardX * a.forwardX + a.forwardZ * a.forwardZ),
+          closeTo(1, 1e-9),
+        );
+        expect(
+          math.sqrt(a.rightX * a.rightX + a.rightZ * a.rightZ),
+          closeTo(1, 1e-9),
+        );
+        expect(a.forwardX * a.rightX + a.forwardZ * a.rightZ, closeTo(0, 1e-9));
+        // 右ドラッグ(dx>0)で注視点が動く向きは -right。
+        final o = CameraOrbit(
+          frame: f,
+          limits: OrbitLimits.forFloor(const FloorSize(20, 14), margin: 100),
+          initial: pose,
+        );
+        o.pan(10, 0, viewWidth: 800, viewHeight: 600);
+        final dx = o.pose.targetX - pose.targetX;
+        final dz = o.pose.targetZ - pose.targetZ;
+        expect(dx * a.rightX + dz * a.rightZ, lessThan(0));
+        expect(dx * a.forwardX + dz * a.forwardZ, closeTo(0, 1e-9));
+      }
+    });
+  });
+
   group('初期姿勢', () {
     test('yaw 0 の視線は T4 までの (0.35, 0.9, -1) の向きと一致', () {
       final f = _frame();

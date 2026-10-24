@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../data/office_models.dart';
+import '../people/avatar_controller.dart' show ViewAxes;
 
 /// シーンの枠。中心と、全体が収まる半径(reach)。目の距離・ズーム 1 の見える範囲の基準。
 class OrbitFrame {
@@ -62,6 +63,17 @@ class OrbitFrame {
     final h = _horizontal(pose.azimuth);
     final cp = math.cos(pose.pitch);
     return (x: -cp * h.x, y: -math.sin(pose.pitch), z: -cp * h.z);
+  }
+
+  /// 地面(X–Z)での「画面の上」と「画面の右」(単位ベクトル)。視線の水平成分が上で、
+  /// 右 = (fz, -fx)。[CameraOrbit.pan] もこの式を使う(右の符号をここに集める)。
+  ViewAxes groundAxes(OrbitPose pose) {
+    final f = forward(pose);
+    final len = math.sqrt(f.x * f.x + f.z * f.z);
+    if (len == 0) return ViewAxes.world;
+    final fx = f.x / len;
+    final fz = f.z / len;
+    return ViewAxes(forwardX: fx, forwardZ: fz, rightX: fz, rightZ: -fx);
   }
 
   /// ズーム込みの「画面 1px あたりのワールド長」。
@@ -238,14 +250,11 @@ class CameraOrbit {
       viewHeight: viewHeight,
     );
     if (!(upp > 0) || !upp.isFinite) return;
-    final f = frame.forward(_pose);
-    final fl = math.sqrt(f.x * f.x + f.z * f.z);
-    if (fl == 0) return;
-    final fx = f.x / fl;
-    final fz = f.z / fl;
-    // 画面の右 = (fz, -fx)。
-    final rx = fz;
-    final rz = -fx;
+    final axes = frame.groundAxes(_pose);
+    final fx = axes.forwardX;
+    final fz = axes.forwardZ;
+    final rx = axes.rightX;
+    final rz = axes.rightZ;
     final vy = dy * upp / math.sin(_pose.pitch);
     final tx = _pose.targetX - rx * dx * upp + fx * vy;
     final tz = _pose.targetZ - rz * dx * upp + fz * vy;

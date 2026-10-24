@@ -1,5 +1,7 @@
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
+import 'package:flutter_3d_demo/office/people/avatar_controller.dart';
+import 'package:flutter_3d_demo/office/people/people_count.dart';
 import 'package:flutter_3d_demo/office/scene/entity_pick.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,5 +38,23 @@ void main() {
     expect(panelNodeName('room-a'), 'room-a#panel');
     expect(pick(tagNodeName('person-b')), isNotNull);
     expect(pick(panelNodeName('room-c')), isNotNull);
+  });
+
+  test('自分(player)のノードは背景(null)。データの id と衝突しない(#12 AC18)', () {
+    for (final name in [
+      avatarBodyNodeName(),
+      avatarNoseNodeName(),
+      avatarTagNodeName(),
+      avatarMarkNodeName(),
+    ]) {
+      expect(pick(name), isNull, reason: name);
+    }
+    expect(avatarBodyNodeName(), 'player#body');
+    for (final n in [null, 5, 6, 7, 8, 9, 10]) {
+      final data = withPeopleCount(dummyOfficeData, n);
+      expect(data.people.any((p) => p.id == avatarId), isFalse);
+      expect(data.seats.any((s) => s.id == avatarId), isFalse);
+      expect(data.rooms.any((r) => r.id == avatarId), isFalse);
+    }
   });
 }

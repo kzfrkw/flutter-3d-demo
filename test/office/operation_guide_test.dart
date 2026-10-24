@@ -35,6 +35,14 @@ void main() {
     expect(find.textContaining('クリック'), findsWidgets);
   });
 
+  testWidgets('十字キーの行と注意書き(#12 AC17)', (tester) async {
+    await pumpGuide(tester);
+    expect(find.byKey(const Key('guide-op-arrows')), findsOneWidget);
+    expect(find.text('十字キー'), findsOneWidget);
+    expect(find.textContaining('自分を動かす'), findsOneWidget);
+    expect(find.byKey(const Key('guide-arrows-note')), findsOneWidget);
+  });
+
   testWidgets('ホットリロードの一文とファイル名(AC5)', (tester) async {
     await pumpGuide(tester);
     expect(find.textContaining('ホットリロード'), findsOneWidget);

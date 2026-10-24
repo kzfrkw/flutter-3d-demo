@@ -7,6 +7,7 @@ import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
 import 'package:flutter_3d_demo/office/guide/guide_memory.dart';
 import 'package:flutter_3d_demo/office/office_page.dart';
+import 'package:flutter_3d_demo/office/people/avatar_controller.dart';
 import 'package:flutter_3d_demo/office/people/people_simulation.dart';
 import 'package:flutter_3d_demo/office/status/office_status.dart';
 import 'package:flutter_3d_demo/office/status/virtual_clock.dart';
@@ -27,6 +28,7 @@ Future<FakeOfficeSceneView> pumpPage(
   ValueListenable<Duration>? virtualTime,
   GuideMemory? guideMemory,
   Future<String> Function()? notesLoader,
+  AvatarController? avatar,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -44,6 +46,7 @@ Future<FakeOfficeSceneView> pumpPage(
         // 既定は案内を閉じた記録つき(既存の操作系テストが案内なしで成り立つ)。
         guideMemory: guideMemory ?? GuideMemory(dismissed: true),
         notesLoader: notesLoader,
+        avatar: avatar,
       ),
     ),
   );
@@ -54,6 +57,7 @@ final side = find.byKey(const Key('info-card-side'));
 final sheet = find.byKey(const Key('info-card-sheet'));
 
 void main() {
+  avatarKeyTests();
   testWidgets('見出しに「ダミーデータ」があり、描画に data が渡る', (tester) async {
     final fake = await pumpPage(tester);
     expect(find.textContaining('ダミーデータ'), findsOneWidget);
@@ -800,5 +804,129 @@ void main() {
       await settle(tester);
       expect(find.text('← デモに戻る'), findsOneWidget);
     });
+  });
+}
+
+AvatarController newAvatar() => AvatarController.forOffice(dummyOfficeData);
+
+void avatarKeyTests() {
+  final keys = {
+    LogicalKeyboardKey.arrowUp: AvatarKey.forward,
+    LogicalKeyboardKey.arrowDown: AvatarKey.back,
+    LogicalKeyboardKey.arrowLeft: AvatarKey.left,
+    LogicalKeyboardKey.arrowRight: AvatarKey.right,
+  };
+
+  group('十字キーで自分を動かす(#12)', () {
+    testWidgets('AC11: keyDown / keyUp が押下に反映され、フォーカスは動かない', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar);
+      await tester.pump();
+      final focus = FocusManager.instance.primaryFocus;
+      for (final e in keys.entries) {
+        await tester.sendKeyDownEvent(e.key);
+        expect(avatar.isPressed(e.value), isTrue, reason: '${e.key}');
+        await tester.sendKeyUpEvent(e.key);
+        expect(avatar.isPressed(e.value), isFalse, reason: '${e.key}');
+        expect(FocusManager.instance.primaryFocus, same(focus));
+      }
+    });
+
+    testWidgets('avatar が無ければ何も起きない', (tester) async {
+      await pumpPage(tester);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    });
+
+    testWidgets('AC12: 案内が開いている間は押下にならない', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar, guideMemory: GuideMemory());
+      await tester.pump();
+      expect(find.byKey(const Key('guide-start-button')), findsOneWidget);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      expect(avatar.isPressed(AvatarKey.forward), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    });
+
+    testWidgets('起動時の案内を はじめる で閉じると、すぐ十字キーが効く', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar, guideMemory: GuideMemory());
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('guide-start-button')));
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      expect(avatar.isPressed(AvatarKey.forward), isTrue);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    });
+
+    testWidgets('案内を開く瞬間に押下が全部離れる', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      expect(avatar.isPressed(AvatarKey.forward), isTrue);
+      await tester.tap(find.byKey(const Key('help-button')));
+      await tester.pump();
+      expect(avatar.isPressed(AvatarKey.forward), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    });
+
+    testWidgets('AC13: 一覧の中にフォーカスがある間は押下にならない', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('list-button')));
+      await tester.pumpAndSettle();
+      // ボタンにフォーカスがある。十字キーは押下にならない。
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+      expect(avatar.isPressed(AvatarKey.back), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+    });
+
+    testWidgets('AC14: 押下中にフォーカスが外れると全部離れる', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+      expect(avatar.isPressed(AvatarKey.forward), isTrue);
+      await tester.tap(find.byKey(const Key('list-button')));
+      await tester.pumpAndSettle();
+      expect(avatar.isPressed(AvatarKey.forward), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    });
+
+    testWidgets('AC14: アプリが裏に回ると全部離れる', (tester) async {
+      final avatar = newAvatar();
+      await pumpPage(tester, avatar: avatar);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+      expect(avatar.isPressed(AvatarKey.left), isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      expect(avatar.isPressed(AvatarKey.left), isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    });
+
+    for (final ref in <EntityRef?>[null, roomA]) {
+      testWidgets('AC15: 3D をタップするとページにフォーカスが戻る($ref)', (tester) async {
+        final avatar = newAvatar();
+        final fake = await pumpPage(tester, avatar: avatar);
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('help-button')));
+        await tester.pump();
+        // 案内を Esc で閉じるとヘルプボタンにフォーカスが戻る。
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+        expect(avatar.isPressed(AvatarKey.forward), isFalse);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+        fake.pick(ref);
+        await tester.pumpAndSettle();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+        expect(avatar.isPressed(AvatarKey.forward), isTrue);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+      });
+    }
   });
 }
