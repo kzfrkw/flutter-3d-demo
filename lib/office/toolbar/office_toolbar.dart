@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// ツールバーの 1 ボタン。T7 の [記録] はここに 1 件足すだけ。
+/// ツールバーの 1 ボタン。項目を足すときはリストに 1 件足すだけ。
 class ToolbarItem {
   const ToolbarItem({
     required this.key,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_3d_demo/notes/dev_notes_page.dart';
 import 'package:flutter_3d_demo/office/data/dummy_office_data.dart';
 import 'package:flutter_3d_demo/office/data/office_models.dart';
 import 'package:flutter_3d_demo/office/guide/guide_memory.dart';
@@ -324,5 +325,53 @@ void main() {
     await open(width: 390);
     await tapKey('menu-button');
     await shootNow('s1-menu');
+  });
+
+  /// 開発記録(T7)。本文は実際の asset(docs/dev-notes.md)を読む。
+  testWidgets('s5 notes screens', (tester) async {
+    // sized() は home の中だけ幅を絞るので、別ルートの狭い幅は DevNotesPage を直接置く。
+    Future<void> openNotes({double? width}) async {
+      if (width != null) {
+        await tester.pumpWidget(app(sized(const DevNotesPage(), width)));
+        await binding.convertFlutterSurfaceToImage();
+        await tester.pump(const Duration(milliseconds: 400));
+        return;
+      }
+      await tester.pumpWidget(
+        app(
+          OfficePage(
+            view: _FakeView(),
+            data: dummyOfficeData,
+            guideMemory: GuideMemory(dismissed: true),
+          ),
+        ),
+      );
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('notes-button')));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+    }
+
+    Future<void> shootNow(String name) async {
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      await tester.pump();
+      await binding.takeScreenshot(name);
+    }
+
+    await openNotes();
+    await shootNow('s5-notes');
+
+    await openNotes(width: 390);
+    await shootNow('s5-notes-narrow');
+
+    // 節 4 の表(横に長い)までスクロールする。
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -2600),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await shootNow('s5-notes-table');
   });
 }

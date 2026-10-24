@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +26,7 @@ Future<FakeOfficeSceneView> pumpPage(
   PeopleSimulation? simulation,
   ValueListenable<Duration>? virtualTime,
   GuideMemory? guideMemory,
+  Future<String> Function()? notesLoader,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -40,6 +43,7 @@ Future<FakeOfficeSceneView> pumpPage(
         virtualTime: virtualTime,
         // 既定は案内を閉じた記録つき(既存の操作系テストが案内なしで成り立つ)。
         guideMemory: guideMemory ?? GuideMemory(dismissed: true),
+        notesLoader: notesLoader,
       ),
     ),
   );
@@ -351,11 +355,16 @@ void main() {
   });
 
   group('ツールバー', () {
-    testWidgets('PC 幅: AppBar に 視点リセット・一覧・ヘルプ(文言+アイコン)。昼夜・記録は無い(AC6)', (
+    testWidgets('PC 幅: AppBar に 視点リセット・一覧・記録・ヘルプ(文言+アイコン)。昼夜は無い(AC6)', (
       tester,
     ) async {
       await pumpPage(tester, size: const Size(1000, 700));
-      for (final k in ['reset-view-button', 'list-button', 'help-button']) {
+      for (final k in [
+        'reset-view-button',
+        'list-button',
+        'notes-button',
+        'help-button',
+      ]) {
         final b = find.byKey(Key(k));
         expect(b, findsOneWidget, reason: k);
         expect(
@@ -371,7 +380,7 @@ void main() {
       expect(find.text('一覧'), findsOneWidget);
       expect(find.text('ヘルプ'), findsOneWidget);
       expect(find.text('昼夜'), findsNothing);
-      expect(find.text('記録'), findsNothing);
+      expect(find.text('記録'), findsOneWidget);
       expect(find.text('開発記録'), findsNothing);
       expect(find.byKey(const Key('bottom-toolbar')), findsNothing);
       expect(find.byKey(const Key('menu-button')), findsNothing);
@@ -534,7 +543,9 @@ void main() {
     });
 
     for (final size in [const Size(1000, 700), const Size(1280, 800)]) {
-      testWidgets('${size.width.toInt()}px: 項目を選ぶとカードが開く(AC11)', (tester) async {
+      testWidgets('${size.width.toInt()}px: 項目を選ぶとカードが開く(AC11)', (
+        tester,
+      ) async {
         await pumpPage(tester, size: size);
         for (final (key, name) in [
           ('list-item-room-room-b', '会議室B'),
@@ -756,5 +767,38 @@ void main() {
       expect(side, findsNothing);
     });
   });
-}
 
+  group('開発記録(記録)', () {
+    Future<String> loader() =>
+        Future.value(File('docs/dev-notes.md').readAsStringSync());
+    Future<void> settle(WidgetTester tester) async {
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+    }
+
+    testWidgets('広い幅: ツールバーに 記録 があり、押すと別ページになる', (tester) async {
+      await pumpPage(tester, notesLoader: loader);
+      expect(find.byKey(const Key('notes-button')), findsOneWidget);
+      expect(find.text('記録'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('notes-button')));
+      await settle(tester);
+      expect(find.text('← デモに戻る'), findsOneWidget);
+      expect(find.text('開発記録'), findsOneWidget);
+      expect(find.byKey(const Key('reset-view-button')), findsNothing);
+      await tester.tap(find.text('← デモに戻る'));
+      await settle(tester);
+      expect(find.byKey(const Key('reset-view-button')), findsOneWidget);
+    });
+
+    testWidgets('狭い幅: ≡ メニューから開ける', (tester) async {
+      await pumpPage(tester, size: const Size(375, 700), notesLoader: loader);
+      await tester.tap(find.byKey(const Key('menu-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('menu-notes')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('menu-notes')));
+      await settle(tester);
+      expect(find.text('← デモに戻る'), findsOneWidget);
+    });
+  });
+}

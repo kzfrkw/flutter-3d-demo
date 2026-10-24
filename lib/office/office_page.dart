@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../notes/dev_notes_page.dart';
 import 'card/info_card.dart';
 import 'data/office_models.dart';
 import 'guide/guide_memory.dart';
@@ -32,6 +33,7 @@ class OfficePage extends StatefulWidget {
     this.simulation,
     this.virtualTime,
     this.guideMemory,
+    this.notesLoader,
   });
 
   final OfficeSceneView view;
@@ -45,6 +47,9 @@ class OfficePage extends StatefulWidget {
 
   /// 操作案内を閉じたかの記録(メモリ内)。null ならこのページ専用の記録を持つ(= 案内が出る)。
   final GuideMemory? guideMemory;
+
+  /// 開発記録の本文の読み込み口。null なら DevNotesPage の既定(rootBundle)。
+  final DevNotesLoader? notesLoader;
 
   @override
   State<OfficePage> createState() => _OfficePageState();
@@ -98,6 +103,14 @@ class _OfficePageState extends State<OfficePage> {
     });
     _syncTimer();
     _restoreFocus();
+  }
+
+  void _openNotes() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DevNotesPage(loader: widget.notesLoader),
+      ),
+    );
   }
 
   void _openGuide() => setState(() => _guideOpen = true);
@@ -189,9 +202,7 @@ class _OfficePageState extends State<OfficePage> {
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _onEscape,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _onEscape},
       child: Focus(
         focusNode: _pageFocus,
         autofocus: true,
@@ -213,6 +224,14 @@ class _OfficePageState extends State<OfficePage> {
                 onPressed: _toggleList,
                 selected: _listOpen,
                 focusNode: _listButtonFocus,
+              ),
+              ToolbarItem(
+                key: const Key('notes-button'),
+                menuKey: const Key('menu-notes'),
+                label: '記録',
+                icon: Icons.menu_book_outlined,
+                onPressed: _openNotes,
+                inMenuOnNarrow: true,
               ),
               ToolbarItem(
                 key: const Key('help-button'),
